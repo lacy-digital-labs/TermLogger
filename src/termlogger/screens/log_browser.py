@@ -1,6 +1,6 @@
 """Log browser screen for viewing and editing QSOs."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from textual import on

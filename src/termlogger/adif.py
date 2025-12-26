@@ -4,7 +4,6 @@ ADIF is the standard format for exchanging amateur radio log data.
 Format specification: https://adif.org/
 """
 
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional

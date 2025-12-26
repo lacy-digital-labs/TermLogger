@@ -5,7 +5,7 @@ from typing import Optional
 
 from textual import on
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal
 from textual.events import Blur
 from textual.message import Message
 from textual.widgets import Button, Input, Label, Select, Static

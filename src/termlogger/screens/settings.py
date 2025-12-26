@@ -1,6 +1,5 @@
 """Settings/Configuration screen."""
 
-from typing import Optional
 
 from textual import on
 from textual.app import ComposeResult

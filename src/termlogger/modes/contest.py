@@ -1,7 +1,6 @@
 """General contest mode implementation."""
 
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 from typing import Optional
 
 from ..models import QSO
@@ -155,19 +154,19 @@ class ContestMode(OperatingMode):
             "START-OF-LOG: 3.0",
             f"CONTEST: {self.config.contest_id}",
             f"CALLSIGN: {self.config.my_callsign}",
-            f"CATEGORY-OPERATOR: SINGLE-OP",
-            f"CATEGORY-BAND: ALL",
+            "CATEGORY-OPERATOR: SINGLE-OP",
+            "CATEGORY-BAND: ALL",
             f"CATEGORY-POWER: {self.config.power}",
-            f"CATEGORY-MODE: MIXED",
+            "CATEGORY-MODE: MIXED",
             f"CLAIMED-SCORE: {self.calculate_score().total_score}",
-            f"CREATED-BY: TermLogger",
-            f"NAME: ",
-            f"ADDRESS: ",
-            f"ADDRESS-CITY: ",
-            f"ADDRESS-STATE-PROVINCE: ",
-            f"ADDRESS-POSTALCODE: ",
-            f"ADDRESS-COUNTRY: ",
-            f"EMAIL: ",
+            "CREATED-BY: TermLogger",
+            "NAME: ",
+            "ADDRESS: ",
+            "ADDRESS-CITY: ",
+            "ADDRESS-STATE-PROVINCE: ",
+            "ADDRESS-POSTALCODE: ",
+            "ADDRESS-COUNTRY: ",
+            "EMAIL: ",
         ]
 
         # Add QSO records

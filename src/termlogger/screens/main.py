@@ -6,17 +6,17 @@ from pathlib import Path
 from typing import Optional
 
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.timer import Timer
 from textual.widgets import Footer, Input, Static
-from textual.worker import Worker, WorkerState, get_current_worker
+from textual.worker import Worker, WorkerState
 
 from ..adif import export_adif_file, parse_adif_file
-from ..callsign import CallsignLookupService, LookupError
+from ..callsign import LookupError
 from ..config import DXClusterSource
 from ..database import Database
-from ..models import CallsignLookupResult, QSO, Spot
+from ..models import CallsignLookupResult, Spot
 from ..modes import (
     ContestMode,
     FieldDayMode,
@@ -480,7 +480,7 @@ class MainScreen(Screen):
         try:
             result = await self.app.lookup_service.lookup(callsign)
             return result
-        except LookupError as e:
+        except LookupError:
             return None
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:

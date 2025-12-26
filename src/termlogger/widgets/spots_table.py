@@ -101,8 +101,8 @@ class SpotsTable(Static):
         """Create child widgets."""
         yield Static(f"[bold]{self._title}[/bold]", classes="spots-header", id="spots-title")
         with Horizontal(classes="filter-row"):
-            yield Button(f"Band: All", id="band-filter", classes="filter-btn")
-            yield Button(f"Mode: All", id="mode-filter", classes="filter-btn")
+            yield Button("Band: All", id="band-filter", classes="filter-btn")
+            yield Button("Mode: All", id="mode-filter", classes="filter-btn")
         yield DataTable(id="spots-data-table", cursor_type="row")
 
     def on_mount(self) -> None:

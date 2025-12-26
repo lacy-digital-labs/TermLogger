@@ -1,12 +1,11 @@
 """File picker screen for ADIF import/export."""
 
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.message import Message
 from textual.screen import ModalScreen
 from textual.widgets import Button, DirectoryTree, Input, Label, Static
 

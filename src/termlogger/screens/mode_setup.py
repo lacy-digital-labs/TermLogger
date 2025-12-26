@@ -1,17 +1,14 @@
 """Mode selection and setup screens."""
 
-from datetime import datetime
 from typing import Optional
 
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.screen import ModalScreen, Screen
+from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
     Checkbox,
-    Footer,
-    Header,
     Input,
     Label,
     ListItem,
@@ -26,7 +23,6 @@ from ..modes import (
     FieldDayConfig,
     FieldDayMode,
     ModeType,
-    OperatingMode,
     POTAConfig,
     POTAMode,
 )

@@ -1,10 +1,8 @@
 """ARRL Field Day mode implementation."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Optional
 
-from ..models import QSO
 from .base import ModeConfig, ModeScore, ModeType, OperatingMode
 
 
