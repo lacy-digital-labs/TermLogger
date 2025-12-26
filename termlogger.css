@@ -1,0 +1,142 @@
+/* TermLogger - Terminal Amateur Radio Logger Stylesheet */
+
+/* Global styles */
+Screen {
+    background: $background;
+}
+
+/* Header customization */
+Header {
+    background: $primary;
+    color: $text;
+}
+
+HeaderTitle {
+    text-style: bold;
+}
+
+/* Footer customization */
+Footer {
+    background: $primary-darken-2;
+}
+
+FooterKey {
+    background: $secondary;
+    color: $text;
+}
+
+/* Custom App Header */
+AppHeader {
+    background: $primary;
+    color: $text;
+    height: 1;
+    dock: top;
+}
+
+/* Band indicator bar */
+BandIndicator {
+    background: $surface;
+    height: 1;
+}
+
+/* QSO Entry Form */
+QSOEntryForm {
+    background: $surface;
+    border: solid $accent;
+    padding: 1;
+    margin-bottom: 1;
+}
+
+QSOEntryForm Label {
+    color: $text-muted;
+}
+
+QSOEntryForm Input {
+    border: tall $primary;
+}
+
+QSOEntryForm Input:focus {
+    border: tall $accent;
+}
+
+QSOEntryForm Select {
+    border: tall $primary;
+}
+
+QSOEntryForm .dupe-warning {
+    color: $error;
+    text-style: bold blink;
+}
+
+/* Callsign Info Panel */
+CallsignInfo {
+    background: $surface;
+    height: 1;
+    color: $text-muted;
+}
+
+/* QSO Table */
+QSOTable {
+    background: $surface;
+    border: solid $primary;
+}
+
+QSOTable DataTable {
+    background: $surface;
+}
+
+QSOTable DataTable > .datatable--header {
+    background: $primary;
+    color: $text;
+    text-style: bold;
+}
+
+QSOTable DataTable > .datatable--cursor {
+    background: $accent;
+    color: $text;
+}
+
+QSOTable DataTable > .datatable--hover {
+    background: $primary-lighten-2;
+}
+
+/* Status Bar */
+StatusBar {
+    background: $primary;
+    color: $text;
+    text-align: right;
+    padding: 0 2;
+}
+
+/* Notification styling */
+Toast {
+    background: $surface;
+    border: solid $accent;
+}
+
+/* Modal screens */
+ModalScreen {
+    align: center middle;
+}
+
+/* Help text */
+.help-text {
+    color: $text-muted;
+    text-style: italic;
+}
+
+/* Error states */
+.error {
+    color: $error;
+    text-style: bold;
+}
+
+/* Success states */
+.success {
+    color: $success;
+}
+
+/* Warning states */
+.warning {
+    color: $warning;
+}

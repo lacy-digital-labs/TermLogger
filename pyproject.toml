@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "termlogger"
+version = "0.1.0"
+description = "A terminal-based amateur radio logging application"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    { name = "TermLogger Contributors" }
+]
+keywords = ["amateur-radio", "ham-radio", "logging", "tui", "terminal"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Communications :: Ham Radio",
+]
+dependencies = [
+    "textual>=0.47.0",
+    "pydantic>=2.0",
+    "httpx",
+    "python-dateutil",
+    "xmltodict",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "textual-dev",
+]
+
+[project.scripts]
+termlogger = "termlogger.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/termlogger"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
