@@ -7,6 +7,7 @@ from textual.app import App
 from .callsign import CallsignLookupService
 from .config import load_config
 from .database import Database
+from .screens.help import SplashScreen
 from .screens.main import MainScreen
 
 
@@ -31,6 +32,8 @@ class TermLoggerApp(App):
     def on_mount(self) -> None:
         """Initialize the application."""
         self.push_screen(MainScreen(self.db))
+        # Show splash screen on startup
+        self.push_screen(SplashScreen())
 
     async def on_unmount(self) -> None:
         """Clean up resources when app closes."""

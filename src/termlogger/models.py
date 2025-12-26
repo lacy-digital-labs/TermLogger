@@ -1,6 +1,6 @@
 """Data models for TermLogger."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
@@ -201,3 +201,49 @@ class CallsignLookupResult(BaseModel):
         if self.grid_square:
             parts.append(f"[{self.grid_square}]")
         return " - ".join(parts) if parts else "No information available"
+
+
+class SpotSource(str, Enum):
+    """Source of a spot."""
+
+    POTA = "pota"
+    DX_CLUSTER = "dxcluster"
+    WEB_API = "webapi"
+
+
+class Spot(BaseModel):
+    """A DX or POTA spot."""
+
+    callsign: str = Field(..., description="Spotted station callsign")
+    frequency: float = Field(..., gt=0, description="Frequency in MHz")
+    mode: Optional[str] = Field(default=None, description="Operating mode")
+    spotter: str = Field(default="", description="Callsign of the spotter")
+    comment: str = Field(default="", description="Spot comment or info")
+    time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Spot time UTC")
+    source: SpotSource = Field(default=SpotSource.DX_CLUSTER, description="Spot source")
+
+    # POTA-specific fields
+    park_reference: Optional[str] = Field(default=None, description="POTA park reference (e.g., K-1234)")
+    park_name: Optional[str] = Field(default=None, description="Park name")
+
+    # Location info
+    grid_square: Optional[str] = Field(default=None, description="Grid square")
+    state: Optional[str] = Field(default=None, description="State/province")
+    country: Optional[str] = Field(default=None, description="Country")
+
+    @property
+    def band(self) -> Optional[Band]:
+        """Get the band for this spot based on frequency."""
+        return frequency_to_band(self.frequency)
+
+    @property
+    def time_str(self) -> str:
+        """Get formatted time string (HH:MM)."""
+        return self.time.strftime("%H:%M")
+
+    @property
+    def info_str(self) -> str:
+        """Get info string for display (park ref or comment)."""
+        if self.park_reference:
+            return f"{self.park_reference} {self.park_name or ''}"[:25]
+        return self.comment[:25] if self.comment else ""

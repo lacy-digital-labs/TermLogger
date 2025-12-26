@@ -6,6 +6,7 @@ from typing import Optional
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.events import Blur
 from textual.message import Message
 from textual.widgets import Button, Input, Label, Select, Static
 
@@ -18,26 +19,47 @@ class QSOEntryForm(Static):
     DEFAULT_CSS = """
     QSOEntryForm {
         height: auto;
-        padding: 1;
-        border: solid $primary;
+        padding: 0 1;
+        background: $surface;
     }
 
     QSOEntryForm .form-row {
-        height: 3;
+        height: 4;
+        margin-bottom: 0;
     }
 
     QSOEntryForm Label {
         width: auto;
-        content-align: right middle;
-        padding-right: 1;
+        height: 3;
+        color: $text-muted;
+        padding: 1 0 0 0;
+        margin-right: 0;
     }
 
-    QSOEntryForm .label-callsign {
-        width: 10;
+    QSOEntryForm Input {
+        background: $surface-lighten-1;
+        margin-right: 2;
+    }
+
+    QSOEntryForm Input:focus {
+        background: $surface-lighten-2;
+    }
+
+    QSOEntryForm Select {
+        margin-right: 2;
+    }
+
+    QSOEntryForm SelectCurrent {
+        background: $surface-lighten-1;
+        border: solid $primary;
+    }
+
+    QSOEntryForm Select:focus SelectCurrent {
+        background: $surface-lighten-2;
     }
 
     QSOEntryForm .callsign-input {
-        width: 16;
+        width: 12;
     }
 
     QSOEntryForm .freq-input {
@@ -53,7 +75,7 @@ class QSOEntryForm(Static):
     }
 
     QSOEntryForm .time-input {
-        width: 12;
+        width: 14;
     }
 
     QSOEntryForm .date-input {
@@ -62,6 +84,7 @@ class QSOEntryForm(Static):
 
     QSOEntryForm .notes-input {
         width: 1fr;
+        margin-right: 1;
     }
 
     QSOEntryForm .dupe-warning {
@@ -72,24 +95,33 @@ class QSOEntryForm(Static):
     QSOEntryForm .button-row {
         height: 3;
         align: left middle;
+        margin-top: 0;
     }
 
     QSOEntryForm .button-row Static {
         width: 1fr;
-        height: 3;
+        height: 1;
         content-align: left middle;
     }
 
     QSOEntryForm .log-btn {
-        width: 16;
-    }
-
-    QSOEntryForm .status-row {
-        height: 1;
+        height: 3;
+        min-width: 10;
+        border: solid $primary;
+        background: $primary;
     }
 
     QSOEntryForm .more-btn {
-        width: 12;
+        height: 3;
+        min-width: 8;
+        border: solid $surface-lighten-2;
+        background: $surface-lighten-2;
+    }
+
+    QSOEntryForm Button {
+        height: 3;
+        min-height: 3;
+        padding: 0 1;
     }
     """
 
@@ -102,6 +134,13 @@ class QSOEntryForm(Static):
 
     class CallsignChanged(Message):
         """Message sent when callsign changes (for lookup)."""
+
+        def __init__(self, callsign: str) -> None:
+            self.callsign = callsign
+            super().__init__()
+
+    class CallsignBlurred(Message):
+        """Message sent when callsign field loses focus (for lookup)."""
 
         def __init__(self, callsign: str) -> None:
             self.callsign = callsign
@@ -197,6 +236,17 @@ class QSOEntryForm(Static):
         # Emit event for callsign lookup
         if len(callsign) >= 3:
             self.post_message(self.CallsignChanged(callsign))
+
+    def on_blur(self, event: Blur) -> None:
+        """Handle blur events - trigger lookup when callsign loses focus."""
+        # Check if the blur came from the callsign input by checking widget id
+        try:
+            if hasattr(event.widget, 'id') and event.widget.id == "callsign":
+                callsign = event.widget.value.strip().upper()
+                if len(callsign) >= 3:
+                    self.post_message(self.CallsignBlurred(callsign))
+        except Exception:
+            pass
 
     @on(Input.Submitted)
     def _on_input_submitted(self, event: Input.Submitted) -> None:

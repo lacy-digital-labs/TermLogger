@@ -1,5 +1,6 @@
 """Main logging screen."""
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -7,13 +8,15 @@ from typing import Optional
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
+from textual.timer import Timer
 from textual.widgets import Footer, Input, Static
-from textual.worker import Worker, get_current_worker
+from textual.worker import Worker, WorkerState, get_current_worker
 
 from ..adif import export_adif_file, parse_adif_file
 from ..callsign import CallsignLookupService, LookupError
+from ..config import DXClusterSource
 from ..database import Database
-from ..models import CallsignLookupResult, QSO
+from ..models import CallsignLookupResult, QSO, Spot
 from ..modes import (
     ContestMode,
     FieldDayMode,
@@ -21,17 +24,23 @@ from ..modes import (
     OperatingMode,
     POTAMode,
 )
+from ..services import DXClusterService, POTASpotService
 from ..widgets.qso_entry import QSOEntryForm
 from ..widgets.qso_table import QSOTable
+from ..widgets.spots_table import SpotsTable
 from .file_picker import ExportCompleteScreen, FilePickerScreen
 from .log_browser import LogBrowserScreen
 from .mode_setup import (
     ContestSetupScreen,
     FieldDaySetupScreen,
     ModeSelectScreen,
+    POTAHunterSetupScreen,
     POTASetupScreen,
 )
+from .help import HelpScreen
 from .settings import SettingsScreen
+
+logger = logging.getLogger(__name__)
 
 
 class CallsignInfo(Static):
@@ -215,14 +224,26 @@ class MainScreen(Screen):
 
     CSS = """
     MainScreen {
-        layout: grid;
-        grid-size: 1;
-        grid-rows: auto auto 1fr auto;
+        layout: vertical;
     }
 
     .main-container {
-        height: 100%;
+        height: 1fr;
         padding: 0 1;
+    }
+
+    #tables-container {
+        height: 1fr;
+        min-height: 10;
+        width: 100%;
+    }
+
+    #spots-table {
+        width: 2fr;
+    }
+
+    #qso-table {
+        width: 3fr;
     }
     """
 
@@ -230,6 +251,9 @@ class MainScreen(Screen):
         super().__init__()
         self.db = db
         self._current_mode: Optional[OperatingMode] = None
+        self._spot_timer: Optional[Timer] = None
+        self._pota_spot_service: Optional[POTASpotService] = None
+        self._dx_cluster_service: Optional[DXClusterService] = None
 
     def compose(self) -> ComposeResult:
         """Create child widgets."""
@@ -248,8 +272,10 @@ class MainScreen(Screen):
             # Callsign lookup info
             yield CallsignInfo(id="callsign-info")
 
-            # QSO table
-            yield QSOTable(id="qso-table")
+            # Tables container (Spots table + QSO table)
+            with Horizontal(id="tables-container"):
+                yield SpotsTable(id="spots-table", title="DX Spots")
+                yield QSOTable(id="qso-table")
 
         yield StatusBar(id="status-bar")
         yield Footer()
@@ -269,6 +295,124 @@ class MainScreen(Screen):
 
         # Set initial band indicator
         self.query_one(BandIndicator).set_band_info(14.250, "SSB", "20m")
+
+        # Initialize spot services
+        self._pota_spot_service = POTASpotService()
+        self._dx_cluster_service = DXClusterService(
+            host=self.app.config.dx_cluster_host,
+            port=self.app.config.dx_cluster_port,
+            callsign=self.app.config.dx_cluster_callsign or self.app.config.my_callsign,
+        )
+
+        # Start spot refresh based on current mode
+        self._start_spot_refresh()
+
+    async def on_unmount(self) -> None:
+        """Clean up when screen is unmounted."""
+        self._stop_spot_refresh()
+        if self._pota_spot_service:
+            await self._pota_spot_service.close()
+        if self._dx_cluster_service:
+            await self._dx_cluster_service.close()
+
+    def _start_spot_refresh(self) -> None:
+        """Start the spot refresh timer based on current mode."""
+        self._stop_spot_refresh()
+
+        # Determine refresh interval based on mode
+        if self._current_mode and self._current_mode.mode_type == ModeType.POTA:
+            if self.app.config.pota_spots_enabled:
+                interval = self.app.config.pota_spots_refresh_seconds
+                self._spot_timer = self.set_interval(interval, self._refresh_pota_spots)
+                self.query_one(SpotsTable).set_title("POTA Spots")
+                # Do initial fetch
+                self.run_worker(self._fetch_pota_spots(), exclusive=True)
+        else:
+            if self.app.config.dx_cluster_enabled:
+                interval = self.app.config.dx_cluster_refresh_seconds
+                self._spot_timer = self.set_interval(interval, self._refresh_dx_spots)
+                self.query_one(SpotsTable).set_title("DX Spots")
+                # Do initial fetch
+                self.run_worker(self._fetch_dx_spots(), exclusive=True)
+
+    def _stop_spot_refresh(self) -> None:
+        """Stop the spot refresh timer."""
+        if self._spot_timer:
+            self._spot_timer.stop()
+            self._spot_timer = None
+
+    def _refresh_pota_spots(self) -> None:
+        """Trigger POTA spots refresh."""
+        self.run_worker(self._fetch_pota_spots(), exclusive=True)
+
+    def _refresh_dx_spots(self) -> None:
+        """Trigger DX cluster spots refresh."""
+        self.run_worker(self._fetch_dx_spots(), exclusive=True)
+
+    async def _fetch_pota_spots(self) -> list[Spot]:
+        """Fetch POTA spots asynchronously."""
+        try:
+            if self._pota_spot_service:
+                spots = await self._pota_spot_service.get_spots(limit=50)
+                # Use call_later to safely update UI from async worker
+                self.app.call_later(self._update_spots_table, spots)
+                return spots
+        except Exception as e:
+            logger.error(f"Error fetching POTA spots: {e}")
+            self.notify(f"POTA spots error: {e}", severity="warning", timeout=3)
+        return []
+
+    async def _fetch_dx_spots(self) -> list[Spot]:
+        """Fetch DX cluster spots asynchronously."""
+        try:
+            if self._dx_cluster_service:
+                source = self.app.config.dx_cluster_source
+                use_telnet = source in (DXClusterSource.TELNET, DXClusterSource.BOTH)
+                use_web = source in (DXClusterSource.WEB_API, DXClusterSource.BOTH)
+                spots = await self._dx_cluster_service.get_spots(
+                    limit=50,
+                    use_telnet=use_telnet,
+                    use_web=use_web,
+                )
+                # Use call_later to safely update UI from async worker
+                self.app.call_later(self._update_spots_table, spots)
+                return spots
+        except Exception as e:
+            logger.error(f"Error fetching DX spots: {e}")
+            self.notify(f"DX spots error: {e}", severity="warning", timeout=3)
+        return []
+
+    def _update_spots_table(self, spots: list[Spot]) -> None:
+        """Update the spots table with new spots."""
+        try:
+            spots_table = self.query_one(SpotsTable)
+            spots_table.load_spots(spots)
+            logger.info(f"Updated spots table with {len(spots)} spots")
+        except Exception as e:
+            logger.error(f"Failed to update spots table: {e}")
+
+    def on_spots_table_spot_selected(self, event: SpotsTable.SpotSelected) -> None:
+        """Handle spot selection - auto-fill the QSO form."""
+        spot = event.spot
+        form = self.query_one(QSOEntryForm)
+
+        # Set callsign
+        try:
+            callsign_input = self.query_one("#callsign", Input)
+            callsign_input.value = spot.callsign
+        except Exception:
+            pass
+
+        # Set frequency and mode
+        form.set_frequency(spot.frequency)
+        if spot.mode:
+            form.set_mode(spot.mode)
+
+        # Trigger lookup
+        if spot.callsign:
+            self._do_lookup(spot.callsign)
+
+        self.notify(f"Selected {spot.callsign} on {spot.frequency:.3f} MHz", timeout=2)
 
     def on_qso_entry_form_qso_logged(self, event: QSOEntryForm.QSOLogged) -> None:
         """Handle QSO logged event."""
@@ -309,6 +453,13 @@ class MainScreen(Screen):
         if len(event.callsign) >= 3 and self.app.config.auto_lookup:
             self._do_lookup(event.callsign)
 
+    def on_qso_entry_form_callsign_blurred(
+        self, event: QSOEntryForm.CallsignBlurred
+    ) -> None:
+        """Handle callsign field blur - trigger lookup when tabbing out."""
+        if event.callsign:
+            self._do_lookup(event.callsign)
+
     def _do_lookup(self, callsign: str) -> None:
         """Perform async callsign lookup."""
         callsign_info = self.query_one(CallsignInfo)
@@ -335,14 +486,14 @@ class MainScreen(Screen):
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
         """Handle lookup worker completion."""
         if event.worker.name and event.worker.name.startswith("lookup_"):
-            if event.state == event.worker.StateEnum.SUCCESS:
+            if event.state == WorkerState.SUCCESS:
                 result = event.worker.result
                 callsign_info = self.query_one(CallsignInfo)
                 if result:
                     callsign_info.set_info(result.display_str)
                 else:
                     callsign_info.set_info("No information found")
-            elif event.state == event.worker.StateEnum.ERROR:
+            elif event.state == WorkerState.ERROR:
                 self.query_one(CallsignInfo).set_info("Lookup failed")
 
     def _cancel_lookup(self) -> None:
@@ -352,7 +503,7 @@ class MainScreen(Screen):
 
     def action_show_help(self) -> None:
         """Show help screen."""
-        self.notify("F1=Help F2=Export F3=Clear F4=Settings F5=Lookup F7=Browse F8=Cabrillo F9=EndMode F10=Exit | Ctrl+N=New Mode")
+        self.app.push_screen(HelpScreen())
 
     def action_clear_form(self) -> None:
         """Clear the QSO entry form."""
@@ -482,7 +633,7 @@ class MainScreen(Screen):
                     handle_contest_setup,
                 )
             elif mode_type == ModeType.POTA:
-                # Show POTA setup
+                # Show POTA activation setup
                 self.app.push_screen(
                     POTASetupScreen(
                         my_callsign=self.app.config.my_callsign,
@@ -490,6 +641,16 @@ class MainScreen(Screen):
                         my_grid=self.app.config.my_grid or "",
                     ),
                     handle_pota_setup,
+                )
+            elif mode_type == "pota_hunter":
+                # Show POTA hunter setup
+                self.app.push_screen(
+                    POTAHunterSetupScreen(
+                        my_callsign=self.app.config.my_callsign,
+                        my_state=self.app.config.my_state or "",
+                        my_grid=self.app.config.my_grid or "",
+                    ),
+                    handle_pota_hunter_setup,
                 )
             elif mode_type == ModeType.FIELDDAY:
                 # Show Field Day setup
@@ -510,6 +671,16 @@ class MainScreen(Screen):
                 self.query_one(ModeStatus).set_mode(mode)
                 parks = ", ".join(mode.get_all_parks())
                 self.notify(f"Started POTA activation: {parks}")
+                # Switch to POTA spots
+                self._start_spot_refresh()
+
+        def handle_pota_hunter_setup(mode: Optional[POTAMode]) -> None:
+            if mode:
+                self._current_mode = mode
+                self.query_one(ModeStatus).set_mode(mode)
+                self.notify("Started POTA hunting mode")
+                # Switch to POTA spots (hunters want to see activators)
+                self._start_spot_refresh()
 
         def handle_fieldday_setup(mode: Optional[FieldDayMode]) -> None:
             if mode:
@@ -530,6 +701,8 @@ class MainScreen(Screen):
         self._current_mode = None
         self.query_one(ModeStatus).set_mode(None)
         self.notify(f"Ended {mode_name} - Final score: {score.total_score}")
+        # Switch back to DX cluster spots
+        self._start_spot_refresh()
 
     def action_export_cabrillo(self) -> None:
         """Export log in Cabrillo format."""

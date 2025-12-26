@@ -43,12 +43,34 @@ class QRZXMLLookup(CallsignLookupProvider):
     """
 
     API_URL = "https://xmldata.qrz.com/xml/current/"
+    NS = {"qrz": "http://xmldata.qrz.com"}
 
     def __init__(self, username: str, password: str):
         self.username = username
         self.password = password
         self._session_key: Optional[str] = None
         self._client = httpx.AsyncClient(timeout=10.0)
+
+    def _find(self, root: ET.Element, path: str) -> Optional[ET.Element]:
+        """Find element with QRZ namespace."""
+        # Try with namespace using {uri}tag format
+        ns_uri = "http://xmldata.qrz.com"
+
+        # Handle paths like ".//Session" or "Key"
+        if path.startswith(".//"):
+            tag = path[3:]
+            ns_path = f".//{{{ns_uri}}}{tag}"
+        elif path.startswith("./"):
+            tag = path[2:]
+            ns_path = f"./{{{ns_uri}}}{tag}"
+        else:
+            ns_path = f"{{{ns_uri}}}{path}"
+
+        elem = root.find(ns_path)
+        if elem is None:
+            # Fallback to without namespace
+            elem = root.find(path)
+        return elem
 
     async def authenticate(self) -> bool:
         """Authenticate and get session key."""
@@ -62,16 +84,16 @@ class QRZXMLLookup(CallsignLookupProvider):
 
             # Parse XML response
             root = ET.fromstring(response.text)
-            session = root.find(".//Session")
+            session = self._find(root, ".//Session")
 
             if session is not None:
-                key_elem = session.find("Key")
+                key_elem = self._find(session, "Key")
                 if key_elem is not None and key_elem.text:
                     self._session_key = key_elem.text
                     return True
 
                 # Check for error
-                error_elem = session.find("Error")
+                error_elem = self._find(session, "Error")
                 if error_elem is not None:
                     raise LookupError(f"QRZ auth error: {error_elem.text}")
 
@@ -99,9 +121,9 @@ class QRZXMLLookup(CallsignLookupProvider):
             root = ET.fromstring(response.text)
 
             # Check for session error (expired key)
-            session = root.find(".//Session")
+            session = self._find(root, ".//Session")
             if session is not None:
-                error_elem = session.find("Error")
+                error_elem = self._find(session, "Error")
                 if error_elem is not None:
                     error_text = error_elem.text or ""
                     if "Session Timeout" in error_text or "Invalid session" in error_text:
@@ -115,7 +137,7 @@ class QRZXMLLookup(CallsignLookupProvider):
                         raise LookupError(f"QRZ error: {error_text}")
 
             # Parse callsign data
-            callsign_elem = root.find(".//Callsign")
+            callsign_elem = self._find(root, ".//Callsign")
             if callsign_elem is None:
                 return None
 
@@ -142,7 +164,7 @@ class QRZXMLLookup(CallsignLookupProvider):
         self, parent: ET.Element, tag: str, default: str = ""
     ) -> Optional[str]:
         """Get text content of a child element."""
-        elem = parent.find(tag)
+        elem = self._find(parent, tag)
         if elem is not None and elem.text:
             return elem.text.strip()
         return default if default else None
@@ -322,7 +344,8 @@ class CallsignLookupService:
 
         # Create provider if needed
         if self._provider is None:
-            if self.config.lookup_service == LookupService.QRZ_XML:
+            if self.config.lookup_service in (LookupService.QRZ, LookupService.QRZ_XML):
+                # Both QRZ options use the XML API (requires subscription)
                 if self.config.qrz_username and self.config.qrz_password:
                     self._provider = QRZXMLLookup(
                         self.config.qrz_username,

@@ -140,3 +140,40 @@ ModalScreen {
 .warning {
     color: $warning;
 }
+
+/* Spots Table */
+SpotsTable {
+    background: $surface;
+    border: solid $accent;
+}
+
+SpotsTable DataTable {
+    background: $surface;
+}
+
+SpotsTable DataTable > .datatable--header {
+    background: $accent;
+    color: $text;
+    text-style: bold;
+}
+
+SpotsTable DataTable > .datatable--cursor {
+    background: $primary;
+    color: $text;
+}
+
+SpotsTable DataTable > .datatable--hover {
+    background: $accent-lighten-2;
+}
+
+SpotsTable .spots-header {
+    background: $accent;
+    color: $text;
+    text-style: bold;
+    padding: 0 1;
+}
+
+/* Spot highlighting for same band */
+.spot-same-band {
+    background: $success-darken-2;
+}

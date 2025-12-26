@@ -216,11 +216,21 @@ class POTAMode(OperatingMode):
     def get_status_text(self) -> str:
         """Get POTA status text."""
         score = self.calculate_score()
-        parks = ", ".join(self.get_all_parks()) if self.get_all_parks() else "No park"
-        valid = "✓" if self.is_valid_activation() else f"({self.config.min_contacts - score.qso_count} more needed)"
 
-        return (
-            f"POTA: {parks} | "
-            f"QSOs: {score.qso_count} {valid} | "
-            f"P2P: {self.get_p2p_count()}"
-        )
+        if self.config.is_activator:
+            # Activator mode - show park and activation progress
+            parks = ", ".join(self.get_all_parks()) if self.get_all_parks() else "No park"
+            valid = "✓" if self.is_valid_activation() else f"({self.config.min_contacts - score.qso_count} more needed)"
+            return (
+                f"POTA: {parks} | "
+                f"QSOs: {score.qso_count} {valid} | "
+                f"P2P: {self.get_p2p_count()}"
+            )
+        else:
+            # Hunter mode - simpler display, no activation count
+            parks_hunted = score.multipliers  # Unique parks worked
+            return (
+                f"POTA Hunter | "
+                f"QSOs: {score.qso_count} | "
+                f"Parks: {parks_hunted}"
+            )

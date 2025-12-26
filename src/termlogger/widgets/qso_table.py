@@ -14,19 +14,17 @@ class QSOTable(Static):
 
     DEFAULT_CSS = """
     QSOTable {
-        height: 1fr;
+        height: 100%;
+        width: 100%;
         border: solid $primary;
+        overflow: auto;
+        scrollbar-gutter: stable;
     }
 
     QSOTable DataTable {
         height: 1fr;
-    }
-
-    QSOTable .table-header {
-        height: 1;
-        background: $primary;
-        color: $text;
-        padding: 0 1;
+        width: 100%;
+        scrollbar-gutter: stable;
     }
     """
 
@@ -46,7 +44,7 @@ class QSOTable(Static):
         ("Mode", 6),
         ("Sent", 5),
         ("Recv", 5),
-        ("Notes", 20),
+        ("Notes", None),  # None = auto-expand to fill remaining space
     ]
 
     def __init__(self, id: Optional[str] = None) -> None:

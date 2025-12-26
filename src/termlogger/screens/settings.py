@@ -19,7 +19,7 @@ from textual.widgets import (
     TabPane,
 )
 
-from ..config import AppConfig, LookupService, save_config
+from ..config import AppConfig, DXClusterSource, LookupService, save_config
 
 
 class SettingsScreen(Screen):
@@ -295,6 +295,92 @@ class SettingsScreen(Screen):
                             classes="help-text",
                         )
 
+            # Spots Tab
+            with TabPane("Spots", id="spots-tab"):
+                with VerticalScroll():
+                    with Vertical(classes="settings-section"):
+                        yield Static("POTA Spots", classes="section-title")
+
+                        yield Checkbox(
+                            "Enable POTA spots in POTA mode",
+                            value=self.config.pota_spots_enabled,
+                            id="pota_spots_enabled",
+                        )
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Refresh (seconds):")
+                            yield Input(
+                                value=str(self.config.pota_spots_refresh_seconds),
+                                placeholder="60",
+                                id="pota_spots_refresh_seconds",
+                            )
+
+                        yield Static(
+                            "POTA spots are fetched from pota.app API",
+                            classes="help-text",
+                        )
+
+                    with Vertical(classes="settings-section"):
+                        yield Static("DX Cluster", classes="section-title")
+
+                        yield Checkbox(
+                            "Enable DX cluster spots in general mode",
+                            value=self.config.dx_cluster_enabled,
+                            id="dx_cluster_enabled",
+                        )
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Source:")
+                            yield Select(
+                                [
+                                    ("Web API only", DXClusterSource.WEB_API.value),
+                                    ("Telnet only", DXClusterSource.TELNET.value),
+                                    ("Both (telnet + web)", DXClusterSource.BOTH.value),
+                                ],
+                                value=self.config.dx_cluster_source.value,
+                                id="dx_cluster_source",
+                            )
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Refresh (seconds):")
+                            yield Input(
+                                value=str(self.config.dx_cluster_refresh_seconds),
+                                placeholder="30",
+                                id="dx_cluster_refresh_seconds",
+                            )
+
+                    with Vertical(classes="settings-section"):
+                        yield Static("Telnet Cluster Settings", classes="section-title")
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Host:")
+                            yield Input(
+                                value=self.config.dx_cluster_host,
+                                placeholder="dxc.nc7j.com",
+                                id="dx_cluster_host",
+                            )
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Port:")
+                            yield Input(
+                                value=str(self.config.dx_cluster_port),
+                                placeholder="7373",
+                                id="dx_cluster_port",
+                            )
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Callsign:")
+                            yield Input(
+                                value=self.config.dx_cluster_callsign,
+                                placeholder="Leave empty to use your callsign",
+                                id="dx_cluster_callsign",
+                            )
+
+                        yield Static(
+                            "Telnet requires a valid callsign for login",
+                            classes="help-text",
+                        )
+
             # Defaults Tab
             with TabPane("Defaults", id="defaults-tab"):
                 with VerticalScroll():
@@ -382,6 +468,32 @@ class SettingsScreen(Screen):
         lookup_value = self.query_one("#lookup_service", Select).value
         lookup_service = LookupService(lookup_value) if lookup_value else LookupService.NONE
 
+        # Parse spot refresh intervals
+        pota_refresh_str = self.query_one("#pota_spots_refresh_seconds", Input).value.strip()
+        try:
+            pota_refresh = int(pota_refresh_str) if pota_refresh_str else 60
+            pota_refresh = max(10, min(300, pota_refresh))
+        except ValueError:
+            pota_refresh = 60
+
+        dx_refresh_str = self.query_one("#dx_cluster_refresh_seconds", Input).value.strip()
+        try:
+            dx_refresh = int(dx_refresh_str) if dx_refresh_str else 30
+            dx_refresh = max(10, min(300, dx_refresh))
+        except ValueError:
+            dx_refresh = 30
+
+        # Parse DX cluster port
+        dx_port_str = self.query_one("#dx_cluster_port", Input).value.strip()
+        try:
+            dx_port = int(dx_port_str) if dx_port_str else 7373
+        except ValueError:
+            dx_port = 7373
+
+        # Get DX cluster source
+        dx_source_value = self.query_one("#dx_cluster_source", Select).value
+        dx_source = DXClusterSource(dx_source_value) if dx_source_value else DXClusterSource.WEB_API
+
         return AppConfig(
             # Station info
             my_callsign=self.query_one("#my_callsign", Input).value.strip().upper(),
@@ -407,6 +519,16 @@ class SettingsScreen(Screen):
             default_frequency=frequency,
             # Database
             db_path=self.query_one("#db_path", Input).value.strip(),
+            # POTA Spots
+            pota_spots_enabled=self.query_one("#pota_spots_enabled", Checkbox).value,
+            pota_spots_refresh_seconds=pota_refresh,
+            # DX Cluster
+            dx_cluster_enabled=self.query_one("#dx_cluster_enabled", Checkbox).value,
+            dx_cluster_source=dx_source,
+            dx_cluster_host=self.query_one("#dx_cluster_host", Input).value.strip(),
+            dx_cluster_port=dx_port,
+            dx_cluster_callsign=self.query_one("#dx_cluster_callsign", Input).value.strip().upper(),
+            dx_cluster_refresh_seconds=dx_refresh,
         )
 
     @on(Button.Pressed, "#save")

@@ -17,6 +17,14 @@ class LookupService(str, Enum):
     HAMQTH = "hamqth"
 
 
+class DXClusterSource(str, Enum):
+    """DX cluster data sources."""
+
+    TELNET = "telnet"
+    WEB_API = "webapi"
+    BOTH = "both"
+
+
 class AppConfig(BaseModel):
     """Application configuration."""
 
@@ -47,6 +55,18 @@ class AppConfig(BaseModel):
 
     # Database
     db_path: str = Field(default="")
+
+    # POTA Spots
+    pota_spots_enabled: bool = Field(default=True)
+    pota_spots_refresh_seconds: int = Field(default=60, ge=10, le=300)
+
+    # DX Cluster
+    dx_cluster_enabled: bool = Field(default=True)
+    dx_cluster_source: DXClusterSource = DXClusterSource.WEB_API
+    dx_cluster_host: str = Field(default="dxc.nc7j.com")
+    dx_cluster_port: int = Field(default=7373, ge=1, le=65535)
+    dx_cluster_callsign: str = Field(default="")  # Uses my_callsign if empty
+    dx_cluster_refresh_seconds: int = Field(default=30, ge=10, le=300)
 
 
 def get_config_dir() -> Path:

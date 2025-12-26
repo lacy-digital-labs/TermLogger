@@ -33,7 +33,7 @@ from ..modes import (
 from ..modes.fieldday import ARRL_SECTIONS
 
 
-class ModeSelectScreen(ModalScreen[Optional[ModeType]]):
+class ModeSelectScreen(ModalScreen[Optional[ModeType | str]]):
     """Screen for selecting an operating mode."""
 
     CSS = """
@@ -82,24 +82,26 @@ class ModeSelectScreen(ModalScreen[Optional[ModeType]]):
     MODES = [
         (ModeType.GENERAL, "General Logging", "Standard QSO logging without special modes"),
         (ModeType.CONTEST, "Contest", "Contest logging with serial numbers and scoring"),
-        (ModeType.POTA, "Parks on the Air", "POTA activation or hunting"),
+        (ModeType.POTA, "POTA Activation", "Activate a park - you're at the park making contacts"),
+        ("pota_hunter", "POTA Hunter", "Hunt park activators - log contacts with stations at parks"),
         (ModeType.FIELDDAY, "ARRL Field Day", "Field Day with class/section exchange"),
     ]
 
     def __init__(self) -> None:
         super().__init__()
-        self._selected_mode: Optional[ModeType] = ModeType.GENERAL
+        self._selected_mode: Optional[ModeType | str] = ModeType.GENERAL
 
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static("Select Operating Mode", classes="mode-title")
 
-            yield ListView(
-                *[ListItem(Label(f"{name}"), id=f"mode_{mode_type.value}")
-                  for mode_type, name, _ in self.MODES],
-                id="mode-list",
-                classes="mode-list",
-            )
+            items = []
+            for mode_type, name, _ in self.MODES:
+                # Handle both ModeType enum and string values
+                mode_value = mode_type.value if isinstance(mode_type, ModeType) else mode_type
+                items.append(ListItem(Label(f"{name}"), id=f"mode_{mode_value}"))
+
+            yield ListView(*items, id="mode-list", classes="mode-list")
 
             yield Static(self.MODES[0][2], id="mode-desc", classes="mode-description")
 
@@ -118,7 +120,9 @@ class ModeSelectScreen(ModalScreen[Optional[ModeType]]):
             item_id = event.item.id or ""
             mode_value = item_id.replace("mode_", "")
             for mode_type, name, desc in self.MODES:
-                if mode_type.value == mode_value:
+                # Handle both ModeType enum and string values
+                check_value = mode_type.value if isinstance(mode_type, ModeType) else mode_type
+                if check_value == mode_value:
                     self._selected_mode = mode_type
                     self.query_one("#mode-desc", Static).update(desc)
                     break
@@ -418,6 +422,130 @@ class POTASetupScreen(ModalScreen[Optional[POTAMode]]):
                 my_state=self.query_one("#my_state", Input).value.strip().upper(),
                 my_grid=self.query_one("#my_grid", Input).value.strip().upper(),
                 is_activator=True,
+            )
+            mode = POTAMode(config)
+            self.dismiss(mode)
+        except ValueError as e:
+            self.notify(f"Invalid input: {e}", severity="error")
+
+
+class POTAHunterSetupScreen(ModalScreen[Optional[POTAMode]]):
+    """Screen for setting up POTA hunting mode."""
+
+    CSS = """
+    POTAHunterSetupScreen {
+        align: center middle;
+    }
+
+    POTAHunterSetupScreen > Vertical {
+        width: 65;
+        height: auto;
+        border: thick $primary;
+        background: $surface;
+        padding: 1;
+    }
+
+    .setup-title {
+        text-align: center;
+        text-style: bold;
+        margin-bottom: 1;
+        color: $accent;
+    }
+
+    .setup-section {
+        height: auto;
+        margin-bottom: 1;
+        padding: 1;
+        border: solid $secondary;
+    }
+
+    .section-title {
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    .setup-row {
+        height: 3;
+        margin-bottom: 1;
+    }
+
+    .setup-row Label {
+        width: 18;
+        content-align: right middle;
+        padding-right: 1;
+    }
+
+    .setup-row Input, .setup-row Select {
+        width: 1fr;
+    }
+
+    .setup-buttons {
+        height: 3;
+        align: center middle;
+        margin-top: 1;
+    }
+
+    .setup-buttons Button {
+        margin: 0 1;
+    }
+
+    .help-text {
+        color: $text-muted;
+        text-style: italic;
+        margin-top: 1;
+    }
+    """
+
+    def __init__(self, my_callsign: str = "", my_state: str = "", my_grid: str = "") -> None:
+        super().__init__()
+        self._my_callsign = my_callsign
+        self._my_state = my_state
+        self._my_grid = my_grid
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Static("POTA Hunter Setup", classes="setup-title")
+
+            with Vertical(classes="setup-section"):
+                yield Static("Hunter Information", classes="section-title")
+
+                with Horizontal(classes="setup-row"):
+                    yield Label("My Callsign:")
+                    yield Input(value=self._my_callsign, id="my_callsign")
+
+                with Horizontal(classes="setup-row"):
+                    yield Label("State/Province:")
+                    yield Input(value=self._my_state, id="my_state")
+
+                with Horizontal(classes="setup-row"):
+                    yield Label("Grid Square:")
+                    yield Input(value=self._my_grid, id="my_grid")
+
+                yield Static(
+                    "As a hunter, you'll log contacts with park activators. "
+                    "Enter their park reference in the exchange.",
+                    classes="help-text",
+                )
+
+            with Horizontal(classes="setup-buttons"):
+                yield Button("Cancel", variant="default", id="cancel")
+                yield Button("Start Hunting", variant="primary", id="start")
+
+    @on(Button.Pressed, "#cancel")
+    def _on_cancel(self) -> None:
+        self.dismiss(None)
+
+    @on(Button.Pressed, "#start")
+    def _on_start(self) -> None:
+        try:
+            config = POTAConfig(
+                name="POTA Hunter",
+                my_callsign=self.query_one("#my_callsign", Input).value.strip().upper(),
+                my_park="",  # Hunters don't have a park
+                additional_parks=[],
+                my_state=self.query_one("#my_state", Input).value.strip().upper(),
+                my_grid=self.query_one("#my_grid", Input).value.strip().upper(),
+                is_activator=False,  # This is hunter mode
             )
             mode = POTAMode(config)
             self.dismiss(mode)
