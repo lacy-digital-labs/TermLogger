@@ -16,7 +16,7 @@ class TermLoggerApp(App):
 
     TITLE = "TermLogger"
     SUB_TITLE = "Amateur Radio Logger"
-    CSS_PATH = Path(__file__).parent.parent.parent / "termlogger.css"
+    CSS_PATH = Path(__file__).parent / "termlogger.css"
 
     BINDINGS = [
         ("q", "quit", "Quit"),

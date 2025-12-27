@@ -16,7 +16,7 @@ from PyInstaller.utils.hooks import collect_all
 project_root = Path(SPECPATH)
 
 # Collect all textual resources
-datas = [(str(project_root / 'termlogger.css'), '.')]
+datas = [(str(project_root / 'src' / 'termlogger' / 'termlogger.css'), 'termlogger')]
 binaries = []
 hiddenimports = [
     'pydantic',
@@ -42,7 +42,7 @@ binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
 
 a = Analysis(
-    [str(project_root / 'src' / 'termlogger' / 'app.py')],
+    [str(project_root / 'src' / 'termlogger' / '__main__.py')],
     pathex=[str(project_root / 'src')],
     binaries=binaries,
     datas=datas,
