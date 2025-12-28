@@ -326,7 +326,7 @@ class FlexRadioService:
         if len(parts) < 2:
             return
 
-        handle = parts[0]
+        _handle = parts[0]  # noqa: F841 - handle preserved for future use
         status_data = parts[1]
 
         # Parse status type and data
