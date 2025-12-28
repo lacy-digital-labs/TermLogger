@@ -80,6 +80,9 @@ class QSO(BaseModel):
     datetime_utc: datetime = Field(default_factory=datetime.utcnow)
     notes: str = Field(default="", max_length=500)
 
+    # Log association
+    log_id: Optional[int] = None  # Virtual log this QSO belongs to
+
     # Contest fields
     contest_id: Optional[int] = None
     exchange_sent: Optional[str] = None
@@ -161,6 +164,74 @@ class Contest(BaseModel):
     end_time: Optional[datetime] = None
     exchange_format: str = Field(default="RST+SN")
     active: bool = False
+
+
+class LogType(str, Enum):
+    """Types of virtual logs."""
+
+    GENERAL = "general"
+    POTA_ACTIVATION = "pota_activation"
+    POTA_HUNTER = "pota_hunter"
+    SOTA = "sota"
+    CONTEST = "contest"
+    FIELD_DAY = "field_day"
+    DX_EXPEDITION = "dx_expedition"
+    SPECIAL_EVENT = "special_event"
+
+
+class Log(BaseModel):
+    """A virtual log for organizing QSOs by activation, event, or session."""
+
+    id: Optional[int] = None
+    name: str = Field(..., min_length=1, max_length=100)
+    description: str = Field(default="", max_length=500)
+    log_type: LogType = LogType.GENERAL
+
+    # Associated references
+    pota_ref: Optional[str] = None  # POTA park reference if POTA activation
+    sota_ref: Optional[str] = None  # SOTA summit reference if SOTA activation
+    contest_id: Optional[int] = None  # Contest ID if contest log
+
+    # Metadata
+    my_callsign: Optional[str] = None  # Callsign used for this log
+    my_gridsquare: Optional[str] = None  # Grid square for this log
+    location: Optional[str] = None  # Location description
+
+    # Timestamps
+    created_at: Optional[datetime] = None
+    start_time: Optional[datetime] = None  # When the activation/event started
+    end_time: Optional[datetime] = None  # When the activation/event ended
+
+    # Status
+    is_active: bool = False  # Is this the currently active log?
+    is_archived: bool = False  # Archived logs are hidden from normal view
+
+    # Statistics (computed, not stored)
+    qso_count: int = 0
+
+    @property
+    def display_name(self) -> str:
+        """Get a display name with type indicator."""
+        type_prefix = {
+            LogType.GENERAL: "",
+            LogType.POTA_ACTIVATION: "POTA: ",
+            LogType.POTA_HUNTER: "Hunter: ",
+            LogType.SOTA: "SOTA: ",
+            LogType.CONTEST: "Contest: ",
+            LogType.FIELD_DAY: "FD: ",
+            LogType.DX_EXPEDITION: "DXped: ",
+            LogType.SPECIAL_EVENT: "Event: ",
+        }
+        return f"{type_prefix.get(self.log_type, '')}{self.name}"
+
+    @property
+    def date_str(self) -> str:
+        """Get formatted date string."""
+        if self.start_time:
+            return self.start_time.strftime("%Y-%m-%d")
+        if self.created_at:
+            return self.created_at.strftime("%Y-%m-%d")
+        return ""
 
 
 class CallsignLookupResult(BaseModel):

@@ -10,9 +10,10 @@ TermLogger is a terminal-based amateur radio logging application designed for fa
 4. [Operating Modes](#operating-modes)
 5. [Callsign Lookup](#callsign-lookup)
 6. [DX Spots](#dx-spots)
-7. [ADIF Import/Export](#adif-importexport)
-8. [Settings](#settings)
-9. [Keyboard Reference](#keyboard-reference)
+7. [Rig Control](#rig-control)
+8. [ADIF Import/Export](#adif-importexport)
+9. [Settings](#settings)
+10. [Keyboard Reference](#keyboard-reference)
 
 ---
 
@@ -234,6 +235,119 @@ Click on any spot row to:
 
 ---
 
+## Rig Control
+
+TermLogger can connect to your radio for automatic frequency/mode tracking and QSY control. Two backends are supported.
+
+### Supported Backends
+
+| Backend | Radios Supported | Connection |
+|---------|-----------------|------------|
+| Hamlib (rigctld) | 200+ radios via Hamlib | TCP localhost:4532 |
+| Flex Radio | FlexRadio Systems (SmartSDR) | TCP to radio IP:4992 |
+
+### Configuring Rig Control
+
+In Settings (**Ctrl+S**), go to the **Rig** tab:
+
+1. **Control Type**: Select None, Hamlib (rigctld), or Flex Radio
+2. **Host**: Hostname or IP address
+3. **Port**: TCP port (rigctld: 4532, Flex: 4992)
+4. **Poll Interval**: How often to read frequency (0.1-5.0 seconds)
+5. **Auto-QSY**: Enable to change radio frequency when clicking spots
+
+### Setting Up Hamlib (rigctld)
+
+Hamlib is the standard open-source rig control library supporting 200+ radios.
+
+**1. Find your radio's model number:**
+```bash
+rigctl -l | grep -i icom
+rigctl -l | grep -i yaesu
+rigctl -l | grep -i kenwood
+```
+
+**2. Start rigctld:**
+```bash
+# Generic format
+rigctld -m <model_number> -r <serial_port>
+
+# Icom IC-7300 example
+rigctld -m 3073 -r /dev/ttyUSB0
+
+# Yaesu FT-991A example
+rigctld -m 1035 -r /dev/ttyUSB0
+
+# Kenwood TS-590SG example
+rigctld -m 2021 -r /dev/ttyUSB0
+```
+
+**3. Configure TermLogger:**
+- Control Type: Hamlib (rigctld)
+- Host: localhost
+- Port: 4532
+
+### Setting Up Flex Radio
+
+FlexRadio Systems radios with SmartSDR support direct network control.
+
+**1. Find your Flex Radio's IP address:**
+- Check SmartSDR software or your router's DHCP table
+- Default discovery port: 4992
+
+**2. Configure TermLogger:**
+- Control Type: Flex Radio
+- Host: Your Flex Radio's IP address (e.g., 192.168.1.100)
+- Port: 4992
+
+### Rig Control Features
+
+**Band Indicator**
+- Displays current frequency and band from the radio
+- Updates automatically based on poll interval
+- Shows in top-right corner of main screen
+
+**Frequency on Focus**
+- When you tab to the frequency field, it updates with the radio's current frequency
+- Works with both rigctld and Flex Radio
+
+**Auto-QSY on Spot Click**
+- When enabled, clicking a spot in the spots table changes your radio's frequency
+- Mode is also set if detectable from the spot
+- Form is filled with spot callsign and frequency
+
+### Mode Mapping
+
+TermLogger maps between logging modes and rig modes:
+
+| Logging Mode | rigctld Mode | Flex Mode |
+|--------------|--------------|-----------|
+| SSB | USB (≥10 MHz) / LSB (<10 MHz) | USB / LSB |
+| CW | CW | CW |
+| FT8 | PKTUSB | DIGU |
+| FT4 | PKTUSB | DIGU |
+| RTTY | RTTY | RTTY |
+| FM | FM | FM |
+| AM | AM | AM |
+
+### Troubleshooting Rig Control
+
+**rigctld not connecting:**
+- Ensure rigctld is running before starting TermLogger
+- Check serial port permissions: `sudo chmod 666 /dev/ttyUSB0`
+- Verify model number matches your radio
+
+**Flex Radio not connecting:**
+- Verify the IP address is correct
+- Ensure SmartSDR is running on the radio
+- Check firewall settings on port 4992
+
+**Frequency not updating:**
+- Increase poll interval if radio connection is slow
+- Check that rig control is enabled in Settings
+
+---
+
 ## ADIF Import/Export
 
 ### Importing ADIF
@@ -285,6 +399,13 @@ Press **Ctrl+S** to open the Settings screen.
 - POTA refresh interval
 - DX cluster enabled/disabled
 - DX cluster refresh interval
+
+### Rig Tab
+
+- Control Type (None, Hamlib rigctld, Flex Radio)
+- Host and port settings
+- Poll interval
+- Auto-QSY on spot click toggle
 
 ---
 

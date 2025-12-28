@@ -18,7 +18,7 @@ from textual.widgets import (
     TabPane,
 )
 
-from ..config import AppConfig, DXClusterSource, LookupService, save_config
+from ..config import AppConfig, DXClusterSource, LookupService, RigControlType, save_config
 
 
 class SettingsScreen(Screen):
@@ -380,6 +380,90 @@ class SettingsScreen(Screen):
                             classes="help-text",
                         )
 
+            # Rig Control Tab
+            with TabPane("Rig", id="rig-tab"):
+                with VerticalScroll():
+                    with Vertical(classes="settings-section"):
+                        yield Static("Rig Control", classes="section-title")
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Control Type:")
+                            yield Select(
+                                [
+                                    ("Disabled", RigControlType.NONE.value),
+                                    ("rigctld (Hamlib)", RigControlType.RIGCTLD.value),
+                                    ("Flex Radio (SmartSDR)", RigControlType.FLEXRADIO.value),
+                                ],
+                                value=self.config.rig_control_type.value,
+                                id="rig_control_type",
+                            )
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Poll Interval (s):")
+                            yield Input(
+                                value=str(self.config.rig_poll_interval),
+                                placeholder="0.5",
+                                id="rig_poll_interval",
+                            )
+
+                        yield Checkbox(
+                            "Auto-QSY radio when selecting spots",
+                            value=self.config.rig_auto_qsy,
+                            id="rig_auto_qsy",
+                        )
+
+                    with Vertical(classes="settings-section"):
+                        yield Static("rigctld Settings (Hamlib)", classes="section-title")
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Host:")
+                            yield Input(
+                                value=self.config.rigctld_host,
+                                placeholder="localhost",
+                                id="rigctld_host",
+                            )
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Port:")
+                            yield Input(
+                                value=str(self.config.rigctld_port),
+                                placeholder="4532",
+                                id="rigctld_port",
+                            )
+
+                        yield Static(
+                            "Start rigctld: rigctld -m <model> -r <device>",
+                            classes="help-text",
+                        )
+                        yield Static(
+                            "Find model: rigctl -l | grep <radio>",
+                            classes="help-text",
+                        )
+
+                    with Vertical(classes="settings-section"):
+                        yield Static("Flex Radio Settings (SmartSDR)", classes="section-title")
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Host/IP:")
+                            yield Input(
+                                value=self.config.flexradio_host,
+                                placeholder="192.168.1.100 or radio hostname",
+                                id="flexradio_host",
+                            )
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Port:")
+                            yield Input(
+                                value=str(self.config.flexradio_port),
+                                placeholder="4992",
+                                id="flexradio_port",
+                            )
+
+                        yield Static(
+                            "Enter your Flex Radio's IP address",
+                            classes="help-text",
+                        )
+
             # Defaults Tab
             with TabPane("Defaults", id="defaults-tab"):
                 with VerticalScroll():
@@ -493,6 +577,32 @@ class SettingsScreen(Screen):
         dx_source_value = self.query_one("#dx_cluster_source", Select).value
         dx_source = DXClusterSource(dx_source_value) if dx_source_value else DXClusterSource.WEB_API
 
+        # Get rig control type
+        rig_type_value = self.query_one("#rig_control_type", Select).value
+        rig_control_type = RigControlType(rig_type_value) if rig_type_value else RigControlType.NONE
+
+        # Parse rig poll interval
+        rig_poll_str = self.query_one("#rig_poll_interval", Input).value.strip()
+        try:
+            rig_poll = float(rig_poll_str) if rig_poll_str else 0.5
+            rig_poll = max(0.1, min(5.0, rig_poll))
+        except ValueError:
+            rig_poll = 0.5
+
+        # Parse rigctld port
+        rigctld_port_str = self.query_one("#rigctld_port", Input).value.strip()
+        try:
+            rigctld_port = int(rigctld_port_str) if rigctld_port_str else 4532
+        except ValueError:
+            rigctld_port = 4532
+
+        # Parse flexradio port
+        flexradio_port_str = self.query_one("#flexradio_port", Input).value.strip()
+        try:
+            flexradio_port = int(flexradio_port_str) if flexradio_port_str else 4992
+        except ValueError:
+            flexradio_port = 4992
+
         return AppConfig(
             # Station info
             my_callsign=self.query_one("#my_callsign", Input).value.strip().upper(),
@@ -528,6 +638,14 @@ class SettingsScreen(Screen):
             dx_cluster_port=dx_port,
             dx_cluster_callsign=self.query_one("#dx_cluster_callsign", Input).value.strip().upper(),
             dx_cluster_refresh_seconds=dx_refresh,
+            # Rig Control
+            rig_control_type=rig_control_type,
+            rig_auto_qsy=self.query_one("#rig_auto_qsy", Checkbox).value,
+            rig_poll_interval=rig_poll,
+            rigctld_host=self.query_one("#rigctld_host", Input).value.strip() or "localhost",
+            rigctld_port=rigctld_port,
+            flexradio_host=self.query_one("#flexradio_host", Input).value.strip() or "localhost",
+            flexradio_port=flexradio_port,
         )
 
     @on(Button.Pressed, "#save")

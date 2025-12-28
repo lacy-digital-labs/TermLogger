@@ -7,14 +7,15 @@ from typing import Optional
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.events import Focus
 from textual.screen import Screen
 from textual.timer import Timer
 from textual.widgets import Footer, Input, Static
 from textual.worker import Worker, WorkerState
 
-from ..adif import export_adif_file, parse_adif_file
+from ..adif import export_adif_file, export_pota_adif, get_pota_filename, parse_adif_file
 from ..callsign import LookupError
-from ..config import DXClusterSource
+from ..config import DXClusterSource, RigControlType
 from ..database import Database
 from ..models import CallsignLookupResult, Spot
 from ..modes import (
@@ -24,7 +25,16 @@ from ..modes import (
     OperatingMode,
     POTAMode,
 )
-from ..services import DXClusterService, POTASpotService
+from ..services import (
+    DXClusterService,
+    FlexRadioService,
+    FlexState,
+    Park,
+    POTAParksService,
+    POTASpotService,
+    RigctldService,
+    RigState,
+)
 from ..widgets.qso_entry import QSOEntryForm
 from ..widgets.qso_table import QSOTable
 from ..widgets.spots_table import SpotsTable
@@ -38,6 +48,7 @@ from .mode_setup import (
     POTASetupScreen,
 )
 from .help import HelpScreen
+from .log_manager import LogManagerScreen
 from .settings import SettingsScreen
 
 logger = logging.getLogger(__name__)
@@ -204,6 +215,36 @@ class ModeStatus(Static):
         self._update_display()
 
 
+class LogStatus(Static):
+    """Widget to display current active log."""
+
+    DEFAULT_CSS = """
+    LogStatus {
+        height: 1;
+        padding: 0 1;
+        background: $surface;
+    }
+    """
+
+    def __init__(self, id: Optional[str] = None) -> None:
+        super().__init__(id=id)
+        self._log_name: Optional[str] = None
+        self._qso_count: int = 0
+
+    def set_log(self, name: Optional[str], qso_count: int = 0) -> None:
+        """Set the current log display."""
+        self._log_name = name
+        self._qso_count = qso_count
+        self._update_display()
+
+    def _update_display(self) -> None:
+        """Update the log status display."""
+        if self._log_name is None:
+            self.update("[dim]Log: All QSOs | F6 to manage logs[/dim]")
+        else:
+            self.update(f"[bold green]Log:[/bold green] {self._log_name} [dim]({self._qso_count} QSOs)[/dim] | [dim]F6 to change[/dim]")
+
+
 class MainScreen(Screen):
     """Main logging screen."""
 
@@ -213,6 +254,7 @@ class MainScreen(Screen):
         ("f3", "clear_form", "Clear"),
         ("f4", "show_settings", "Settings"),
         ("f5", "lookup_callsign", "Lookup"),
+        ("f6", "manage_logs", "Logs"),
         ("f7", "browse_log", "Browse"),
         ("f8", "export_cabrillo", "Cabrillo"),
         ("f9", "end_mode", "End Mode"),
@@ -220,6 +262,7 @@ class MainScreen(Screen):
         ("ctrl+n", "new_contest", "New Contest"),
         ("ctrl+e", "export_adif", "Export ADIF"),
         ("ctrl+i", "import_adif", "Import ADIF"),
+        ("ctrl+p", "export_pota", "Export POTA"),
     ]
 
     CSS = """
@@ -251,9 +294,14 @@ class MainScreen(Screen):
         super().__init__()
         self.db = db
         self._current_mode: Optional[OperatingMode] = None
+        self._active_log_id: Optional[int] = None
         self._spot_timer: Optional[Timer] = None
         self._pota_spot_service: Optional[POTASpotService] = None
+        self._pota_parks_service: Optional[POTAParksService] = None
         self._dx_cluster_service: Optional[DXClusterService] = None
+        self._rigctld_service: Optional[RigctldService] = None
+        self._flexradio_service: Optional[FlexRadioService] = None
+        self._rig_poll_timer: Optional[Timer] = None
 
     def compose(self) -> ComposeResult:
         """Create child widgets."""
@@ -262,6 +310,9 @@ class MainScreen(Screen):
         with Vertical(classes="main-container"):
             # Band/mode indicator
             yield BandIndicator(id="band-indicator")
+
+            # Current log status
+            yield LogStatus(id="log-status")
 
             # Operating mode status
             yield ModeStatus(id="mode-status")
@@ -282,13 +333,11 @@ class MainScreen(Screen):
 
     def on_mount(self) -> None:
         """Initialize screen when mounted."""
-        # Load recent QSOs
-        qsos = self.db.get_recent_qsos(50)
-        self.query_one(QSOTable).load_qsos(qsos)
+        # Load active log
+        self._load_active_log()
 
-        # Update status bar
-        count = self.db.get_qso_count()
-        self.query_one(StatusBar).set_qso_count(count)
+        # Load recent QSOs (filtered by active log if set)
+        self._refresh_qso_table()
 
         # Initialize callsign info
         self.query_one(CallsignInfo).clear()
@@ -298,6 +347,7 @@ class MainScreen(Screen):
 
         # Initialize spot services
         self._pota_spot_service = POTASpotService()
+        self._pota_parks_service = POTAParksService()
         self._dx_cluster_service = DXClusterService(
             host=self.app.config.dx_cluster_host,
             port=self.app.config.dx_cluster_port,
@@ -307,31 +357,184 @@ class MainScreen(Screen):
         # Start spot refresh based on current mode
         self._start_spot_refresh()
 
+        # Initialize rig control service based on type
+        rig_type = self.app.config.rig_control_type
+        if rig_type == RigControlType.RIGCTLD:
+            self._rigctld_service = RigctldService(
+                host=self.app.config.rigctld_host,
+                port=self.app.config.rigctld_port,
+                on_state_change=self._on_rig_state_change,
+            )
+            self._start_rig_polling()
+        elif rig_type == RigControlType.FLEXRADIO:
+            self._flexradio_service = FlexRadioService(
+                host=self.app.config.flexradio_host,
+                port=self.app.config.flexradio_port,
+                on_state_change=self._on_flex_state_change,
+            )
+            self._start_rig_polling()
+
+    def _load_active_log(self) -> None:
+        """Load the active log from database."""
+        active_log = self.db.get_active_log()
+        if active_log:
+            self._active_log_id = active_log.id
+            self.query_one(LogStatus).set_log(active_log.display_name, active_log.qso_count)
+        else:
+            self._active_log_id = None
+            self.query_one(LogStatus).set_log(None)
+
+    def _refresh_qso_table(self) -> None:
+        """Refresh the QSO table with current log filter."""
+        qsos = self.db.get_recent_qsos(50, log_id=self._active_log_id)
+        self.query_one(QSOTable).load_qsos(qsos)
+
+        # Update status bar with count
+        count = self.db.get_qso_count(log_id=self._active_log_id)
+        self.query_one(StatusBar).set_qso_count(count)
+
+    # Rig control methods
+    def _start_rig_polling(self) -> None:
+        """Start polling the rig for frequency/mode changes."""
+        self._stop_rig_polling()
+        rig_type = self.app.config.rig_control_type
+        if rig_type != RigControlType.NONE and (self._rigctld_service or self._flexradio_service):
+            interval = self.app.config.rig_poll_interval
+            self._rig_poll_timer = self.set_interval(interval, self._poll_rig)
+            # Do initial poll
+            self.run_worker(self._do_rig_poll(), exclusive=False, name="rig_poll")
+
+    def _stop_rig_polling(self) -> None:
+        """Stop rig polling."""
+        if self._rig_poll_timer:
+            self._rig_poll_timer.stop()
+            self._rig_poll_timer = None
+
+    def _poll_rig(self) -> None:
+        """Trigger a rig poll."""
+        self.run_worker(self._do_rig_poll(), exclusive=False, name="rig_poll")
+
+    async def _do_rig_poll(self) -> None:
+        """Async worker to poll rig state."""
+        if self._rigctld_service:
+            await self._rigctld_service.poll()
+        elif self._flexradio_service:
+            await self._flexradio_service.poll()
+
+    def _on_rig_state_change(self, state: RigState) -> None:
+        """Handle rigctld state change callback - update UI."""
+        # Use call_later for thread-safe UI update
+        self.app.call_later(self._update_rigctld_display, state)
+
+    def _on_flex_state_change(self, state: FlexState) -> None:
+        """Handle Flex Radio state change callback - update UI."""
+        logger.debug(f"Flex state change: {state.frequency_mhz:.3f} MHz {state.mode}")
+        # Use call_later for thread-safe UI update
+        self.app.call_later(self._update_flex_display, state)
+
+    def _update_rigctld_display(self, state: RigState) -> None:
+        """Update UI with new rigctld state."""
+        try:
+            # Update band indicator only - don't overwrite QSO form
+            # User-initiated actions (spot clicks) should control the form
+            band_indicator = self.query_one(BandIndicator)
+            band_str = state.band or "?"
+            mapped_mode = RigctldService.map_mode_from_rigctld(state.mode)
+            band_indicator.set_band_info(state.frequency_mhz, mapped_mode, band_str)
+        except Exception as e:
+            logger.warning(f"Failed to update rig display: {e}")
+
+    def _update_flex_display(self, state: FlexState) -> None:
+        """Update UI with new Flex Radio state."""
+        try:
+            # Update band indicator only - don't overwrite QSO form
+            # User-initiated actions (spot clicks) should control the form
+            band_indicator = self.query_one(BandIndicator)
+            band_str = state.band or "?"
+            mapped_mode = FlexRadioService.map_mode_from_flex(state.mode)
+            logger.debug(f"Flex display update: {state.frequency_mhz:.3f} MHz {mapped_mode} ({band_str})")
+            band_indicator.set_band_info(state.frequency_mhz, mapped_mode, band_str)
+        except Exception as e:
+            logger.warning(f"Failed to update Flex display: {e}")
+
+    def on_focus(self, event: Focus) -> None:
+        """Handle focus events - update frequency from rig when frequency field focused."""
+        # Check if the focused widget is the frequency input
+        # Try multiple ways to get the focused widget ID
+        widget_id = None
+        if hasattr(event, "widget"):
+            widget_id = getattr(event.widget, "id", None)
+        elif hasattr(event, "control"):
+            widget_id = getattr(event.control, "id", None)
+
+        if widget_id == "frequency":
+            self._update_frequency_from_rig()
+
+    def _update_frequency_from_rig(self) -> None:
+        """Update the frequency field from the current rig state."""
+        rig_type = self.app.config.rig_control_type
+        freq_mhz = 0.0
+        mode = None
+
+        if rig_type == RigControlType.RIGCTLD and self._rigctld_service:
+            state = self._rigctld_service.last_state
+            if state:
+                freq_mhz = state.frequency_mhz
+                mode = RigctldService.map_mode_from_rigctld(state.mode)
+        elif rig_type == RigControlType.FLEXRADIO and self._flexradio_service:
+            state = self._flexradio_service.last_state
+            if state and state.frequency > 0:
+                freq_mhz = state.frequency_mhz
+                mode = FlexRadioService.map_mode_from_flex(state.mode)
+
+        if freq_mhz > 0:
+            try:
+                form = self.query_one(QSOEntryForm)
+                form.set_frequency(freq_mhz)
+                logger.debug(f"Updated frequency from rig: {freq_mhz:.3f} MHz")
+                if mode:
+                    try:
+                        form.set_mode(mode)
+                    except (ValueError, KeyError):
+                        pass
+            except Exception as e:
+                logger.warning(f"Failed to update frequency from rig: {e}")
+
     async def on_unmount(self) -> None:
         """Clean up when screen is unmounted."""
         self._stop_spot_refresh()
+        self._stop_rig_polling()
         if self._pota_spot_service:
             await self._pota_spot_service.close()
+        if self._pota_parks_service:
+            await self._pota_parks_service.close()
         if self._dx_cluster_service:
             await self._dx_cluster_service.close()
+        if self._rigctld_service:
+            await self._rigctld_service.close()
+        if self._flexradio_service:
+            await self._flexradio_service.close()
 
     def _start_spot_refresh(self) -> None:
         """Start the spot refresh timer based on current mode."""
         self._stop_spot_refresh()
 
         # Determine refresh interval based on mode
+        spots_table = self.query_one(SpotsTable)
         if self._current_mode and self._current_mode.mode_type == ModeType.POTA:
             if self.app.config.pota_spots_enabled:
                 interval = self.app.config.pota_spots_refresh_seconds
                 self._spot_timer = self.set_interval(interval, self._refresh_pota_spots)
-                self.query_one(SpotsTable).set_title("POTA Spots")
+                spots_table.set_title("POTA Spots")
+                spots_table.reset_filters()  # Reset filters when switching sources
                 # Do initial fetch
                 self.run_worker(self._fetch_pota_spots(), exclusive=True)
         else:
             if self.app.config.dx_cluster_enabled:
                 interval = self.app.config.dx_cluster_refresh_seconds
                 self._spot_timer = self.set_interval(interval, self._refresh_dx_spots)
-                self.query_one(SpotsTable).set_title("DX Spots")
+                spots_table.set_title("DX Spots")
+                spots_table.reset_filters()  # Reset filters when switching sources
                 # Do initial fetch
                 self.run_worker(self._fetch_dx_spots(), exclusive=True)
 
@@ -392,27 +595,114 @@ class MainScreen(Screen):
             logger.error(f"Failed to update spots table: {e}")
 
     def on_spots_table_spot_selected(self, event: SpotsTable.SpotSelected) -> None:
-        """Handle spot selection - auto-fill the QSO form."""
+        """Handle spot selection - auto-fill the QSO form and optionally QSY radio."""
         spot = event.spot
+        logger.info(f"Spot selected: {spot.callsign} {spot.frequency:.3f} MHz {spot.mode}")
         form = self.query_one(QSOEntryForm)
 
         # Set callsign
         try:
             callsign_input = self.query_one("#callsign", Input)
             callsign_input.value = spot.callsign
-        except Exception:
-            pass
+            logger.debug(f"Set callsign to {spot.callsign}")
+        except Exception as e:
+            logger.warning(f"Failed to set callsign: {e}")
 
         # Set frequency and mode
-        form.set_frequency(spot.frequency)
-        if spot.mode:
-            form.set_mode(spot.mode)
+        try:
+            form.set_frequency(spot.frequency)
+            logger.debug(f"Set frequency to {spot.frequency}")
+            if spot.mode:
+                form.set_mode(spot.mode)
+                logger.debug(f"Set mode to {spot.mode}")
+        except Exception as e:
+            logger.warning(f"Failed to set frequency/mode: {e}")
 
-        # Trigger lookup
-        if spot.callsign:
+        # QSY radio if enabled
+        rig_type = self.app.config.rig_control_type
+        if rig_type != RigControlType.NONE and self.app.config.rig_auto_qsy:
+            if (rig_type == RigControlType.RIGCTLD and self._rigctld_service) or (
+                rig_type == RigControlType.FLEXRADIO and self._flexradio_service
+            ):
+                self.run_worker(
+                    self._qsy_to_spot(spot),
+                    exclusive=False,
+                    name="qsy",
+                )
+
+        # For POTA spots, look up park info and display, and fill in park ref
+        if spot.park_reference:
+            # Fill in their park reference in the form (for P2P contacts)
+            form.set_their_park(spot.park_reference)
+            # Look up park info to display
+            self.run_worker(
+                self._lookup_park(spot.park_reference),
+                exclusive=False,
+                name=f"park_{spot.park_reference}",
+            )
+        elif spot.callsign:
+            # For DX spots, do regular callsign lookup
             self._do_lookup(spot.callsign)
 
         self.notify(f"Selected {spot.callsign} on {spot.frequency:.3f} MHz", timeout=2)
+
+    async def _lookup_park(self, park_reference: str) -> Optional[Park]:
+        """Look up POTA park information."""
+        if not self._pota_parks_service:
+            return None
+
+        try:
+            park = await self._pota_parks_service.get_park(park_reference)
+            if park:
+                # Update callsign info with park details
+                self.app.call_later(self._display_park_info, park)
+            return park
+        except Exception as e:
+            logger.warning(f"Park lookup failed: {e}")
+            return None
+
+    def _display_park_info(self, park: Park) -> None:
+        """Display park information in the callsign info area."""
+        try:
+            callsign_info = self.query_one(CallsignInfo)
+            info_parts = [f"[bold cyan]{park.reference}[/bold cyan]: {park.name}"]
+            if park.parktype:
+                info_parts.append(f"[dim]({park.parktype})[/dim]")
+            if park.location_name:
+                info_parts.append(f"[green]{park.location_name}[/green]")
+            if park.grid6:
+                info_parts.append(f"[yellow]{park.grid6}[/yellow]")
+            callsign_info.set_info(" | ".join(info_parts))
+        except Exception as e:
+            logger.warning(f"Failed to display park info: {e}")
+
+    async def _qsy_to_spot(self, spot: Spot) -> None:
+        """QSY the radio to a spot's frequency and mode."""
+        try:
+            rig_type = self.app.config.rig_control_type
+            if rig_type == RigControlType.RIGCTLD and self._rigctld_service:
+                await self._rigctld_service.set_frequency_mhz(spot.frequency)
+                if spot.mode:
+                    rig_mode = RigctldService.map_mode_to_rigctld(
+                        spot.mode, spot.frequency
+                    )
+                    await self._rigctld_service.set_mode(rig_mode)
+                logger.info(f"QSY to {spot.frequency:.3f} MHz {spot.mode or ''}")
+            elif rig_type == RigControlType.FLEXRADIO and self._flexradio_service:
+                await self._flexradio_service.set_frequency_mhz(spot.frequency)
+                if spot.mode:
+                    flex_mode = FlexRadioService.map_mode_to_flex(
+                        spot.mode, spot.frequency
+                    )
+                    await self._flexradio_service.set_mode(flex_mode)
+                logger.info(f"QSY to {spot.frequency:.3f} MHz {spot.mode or ''}")
+        except Exception as e:
+            logger.error(f"QSY failed: {e}")
+            self.app.call_later(
+                self.notify,
+                f"QSY failed: {e}",
+                severity="warning",
+            )
 
     def on_qso_entry_form_qso_logged(self, event: QSOEntryForm.QSOLogged) -> None:
         """Handle QSO logged event."""
@@ -420,9 +710,10 @@ class MainScreen(Screen):
         if self._current_mode:
             event.qso.exchange_sent = self._current_mode.format_exchange_sent()
 
-        # Save to database
-        qso_id = self.db.add_qso(event.qso)
+        # Save to database with active log
+        qso_id = self.db.add_qso(event.qso, log_id=self._active_log_id)
         event.qso.id = qso_id
+        event.qso.log_id = self._active_log_id
 
         # Add to current mode if active
         if self._current_mode:
@@ -432,9 +723,15 @@ class MainScreen(Screen):
         # Add to table
         self.query_one(QSOTable).add_qso(event.qso)
 
-        # Update status
-        count = self.db.get_qso_count()
+        # Update status bar with log-filtered count
+        count = self.db.get_qso_count(log_id=self._active_log_id)
         self.query_one(StatusBar).set_qso_count(count)
+
+        # Update log status with new count
+        if self._active_log_id:
+            active_log = self.db.get_active_log()
+            if active_log:
+                self.query_one(LogStatus).set_log(active_log.display_name, active_log.qso_count)
 
         # Clear callsign info
         self.query_one(CallsignInfo).clear()
@@ -527,15 +824,22 @@ class MainScreen(Screen):
         """Show settings screen."""
         self.app.push_screen(SettingsScreen(self.app.config))
 
+    def action_manage_logs(self) -> None:
+        """Show log manager screen."""
+
+        def on_log_manager_close(log_id: Optional[int]) -> None:
+            # Refresh the active log and QSO table
+            self._load_active_log()
+            self._refresh_qso_table()
+
+        self.app.push_screen(LogManagerScreen(self.db), on_log_manager_close)
+
     def action_browse_log(self) -> None:
         """Show log browser screen."""
 
         def on_browser_close() -> None:
-            # Refresh the table when returning from browser
-            recent_qsos = self.db.get_recent_qsos(50)
-            self.query_one(QSOTable).load_qsos(recent_qsos)
-            count = self.db.get_qso_count()
-            self.query_one(StatusBar).set_qso_count(count)
+            # Refresh the table when returning from browser (respecting log filter)
+            self._refresh_qso_table()
 
         self.app.push_screen(LogBrowserScreen(self.db), on_browser_close)
 
@@ -671,6 +975,8 @@ class MainScreen(Screen):
                 self.query_one(ModeStatus).set_mode(mode)
                 parks = ", ".join(mode.get_all_parks())
                 self.notify(f"Started POTA activation: {parks}")
+                # Enable POTA fields in QSO form
+                self.query_one(QSOEntryForm).set_pota_mode(True)
                 # Switch to POTA spots
                 self._start_spot_refresh()
 
@@ -679,6 +985,8 @@ class MainScreen(Screen):
                 self._current_mode = mode
                 self.query_one(ModeStatus).set_mode(mode)
                 self.notify("Started POTA hunting mode")
+                # Enable POTA fields in QSO form
+                self.query_one(QSOEntryForm).set_pota_mode(True)
                 # Switch to POTA spots (hunters want to see activators)
                 self._start_spot_refresh()
 
@@ -698,9 +1006,14 @@ class MainScreen(Screen):
 
         mode_name = self._current_mode.name or "Mode"
         score = self._current_mode.calculate_score()
+        # Check if it was a POTA mode before clearing
+        was_pota_mode = isinstance(self._current_mode, POTAMode)
         self._current_mode = None
         self.query_one(ModeStatus).set_mode(None)
         self.notify(f"Ended {mode_name} - Final score: {score.total_score}")
+        # Disable POTA fields in QSO form if we were in POTA mode
+        if was_pota_mode:
+            self.query_one(QSOEntryForm).set_pota_mode(False)
         # Switch back to DX cluster spots
         self._start_spot_refresh()
 
@@ -738,6 +1051,66 @@ class MainScreen(Screen):
                 title="Export Cabrillo",
                 start_path=Path.home(),
                 extensions=[".log", ".cbr"],
+                save_mode=True,
+                default_filename=default_filename,
+            ),
+            handle_export,
+        )
+
+    def action_export_pota(self) -> None:
+        """Export log in POTA format for upload to pota.app."""
+        # Check if in POTA mode
+        if not isinstance(self._current_mode, POTAMode):
+            self.notify("Start a POTA activation first (Ctrl+N)", severity="warning")
+            return
+
+        pota_mode = self._current_mode
+        if not pota_mode.config.my_park:
+            self.notify("No park reference configured", severity="warning")
+            return
+
+        # Get QSOs from this activation
+        qsos = pota_mode._qsos
+        if not qsos:
+            self.notify("No QSOs to export", severity="warning")
+            return
+
+        # Generate POTA filename
+        default_filename = get_pota_filename(
+            pota_mode.config.my_callsign,
+            pota_mode.config.my_park,
+        )
+
+        def handle_export(path: Optional[Path]) -> None:
+            if path is None:
+                return
+
+            try:
+                count = export_pota_adif(
+                    qsos,
+                    path,
+                    my_callsign=pota_mode.config.my_callsign,
+                    my_park_ref=pota_mode.config.my_park,
+                    my_state=pota_mode.config.my_state,
+                    my_grid=pota_mode.config.my_grid,
+                )
+                score = pota_mode.calculate_score()
+                self.app.push_screen(
+                    ExportCompleteScreen(
+                        f"Exported {count} QSOs for POTA to:\n{path}\n\n"
+                        f"Park: {pota_mode.config.my_park}\n"
+                        f"P2P Contacts: {score.multipliers}\n\n"
+                        f"Upload at: pota.app → My Log Uploads"
+                    )
+                )
+            except Exception as e:
+                self.notify(f"POTA export failed: {e}", severity="error")
+
+        self.app.push_screen(
+            FilePickerScreen(
+                title="Export for POTA",
+                start_path=Path.home(),
+                extensions=[".adi", ".adif"],
                 save_mode=True,
                 default_filename=default_filename,
             ),

@@ -79,6 +79,31 @@ To enable callsign lookup, configure your credentials in Settings (Ctrl+S):
 - **POTA Spots** - Enabled by default, refreshes every 60 seconds
 - **DX Cluster** - Enabled by default, uses HamQTH web API
 
+### Rig Control
+
+TermLogger supports automatic radio control through two backends:
+
+**Hamlib (rigctld)**
+```bash
+# Start rigctld before running TermLogger
+rigctld -m <model_number> -r <serial_port>
+
+# Example for Icom IC-7300:
+rigctld -m 3073 -r /dev/ttyUSB0
+
+# Find your radio's model number:
+rigctl -l | grep <radio_name>
+```
+
+**Flex Radio SmartSDR**
+- Enter the Flex Radio's IP address in Settings
+- Default port: 4992 (SmartSDR API)
+
+Features:
+- Band indicator shows current frequency/band from radio
+- Frequency field updates from rig when focused
+- Auto-QSY: clicking a spot changes the radio frequency
+
 ## Documentation
 
 See the [User Guide](docs/USER_GUIDE.md) for detailed documentation.

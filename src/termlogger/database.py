@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Generator, Optional
 
-from .models import Contest, Mode, QSO
+from .models import Contest, Log, LogType, Mode, QSO
 
 
 class Database:
@@ -64,6 +64,28 @@ class Database:
                 )
             """)
 
+            # Logs table for virtual logs
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    description TEXT DEFAULT '',
+                    log_type TEXT DEFAULT 'general',
+                    pota_ref TEXT,
+                    sota_ref TEXT,
+                    contest_id INTEGER,
+                    my_callsign TEXT,
+                    my_gridsquare TEXT,
+                    location TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    start_time TEXT,
+                    end_time TEXT,
+                    is_active INTEGER DEFAULT 0,
+                    is_archived INTEGER DEFAULT 0,
+                    FOREIGN KEY (contest_id) REFERENCES contests(id)
+                )
+            """)
+
             # Config table for key-value storage
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS config (
@@ -88,16 +110,49 @@ class Database:
 
             conn.commit()
 
-    def add_qso(self, qso: QSO) -> int:
+            # Run migrations
+            self._migrate_db(conn)
+
+    def _migrate_db(self, conn: sqlite3.Connection) -> None:
+        """Run database migrations for schema updates."""
+        cursor = conn.cursor()
+
+        # Check if log_id column exists in qsos table
+        cursor.execute("PRAGMA table_info(qsos)")
+        columns = [col[1] for col in cursor.fetchall()]
+
+        if "log_id" not in columns:
+            cursor.execute("ALTER TABLE qsos ADD COLUMN log_id INTEGER")
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_qsos_log
+                ON qsos(log_id)
+            """)
+            conn.commit()
+
+        # Create index on logs table
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_logs_active
+            ON logs(is_active)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_logs_type
+            ON logs(log_type)
+        """)
+        conn.commit()
+
+    def add_qso(self, qso: QSO, log_id: Optional[int] = None) -> int:
         """Add a new QSO to the database. Returns the new QSO ID."""
+        # Use provided log_id or the one from the QSO object
+        effective_log_id = log_id if log_id is not None else qso.log_id
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
                 INSERT INTO qsos (
                     callsign, frequency, mode, rst_sent, rst_received,
-                    datetime_utc, notes, contest_id, exchange_sent, exchange_received
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    datetime_utc, notes, contest_id, exchange_sent, exchange_received,
+                    log_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     qso.callsign.upper(),
@@ -110,6 +165,7 @@ class Database:
                     qso.contest_id,
                     qso.exchange_sent,
                     qso.exchange_received,
+                    effective_log_id,
                 ),
             )
             conn.commit()
@@ -124,35 +180,35 @@ class Database:
             return self._row_to_qso(row) if row else None
 
     def get_all_qsos(
-        self, limit: int = 100, offset: int = 0, contest_id: Optional[int] = None
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        contest_id: Optional[int] = None,
+        log_id: Optional[int] = None,
     ) -> list[QSO]:
-        """Get QSOs with pagination."""
+        """Get QSOs with pagination, optionally filtered by contest or log."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
+            query = "SELECT * FROM qsos WHERE 1=1"
+            params: list = []
+
             if contest_id is not None:
-                cursor.execute(
-                    """
-                    SELECT * FROM qsos
-                    WHERE contest_id = ?
-                    ORDER BY datetime_utc DESC
-                    LIMIT ? OFFSET ?
-                """,
-                    (contest_id, limit, offset),
-                )
-            else:
-                cursor.execute(
-                    """
-                    SELECT * FROM qsos
-                    ORDER BY datetime_utc DESC
-                    LIMIT ? OFFSET ?
-                """,
-                    (limit, offset),
-                )
+                query += " AND contest_id = ?"
+                params.append(contest_id)
+
+            if log_id is not None:
+                query += " AND log_id = ?"
+                params.append(log_id)
+
+            query += " ORDER BY datetime_utc DESC LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+
+            cursor.execute(query, params)
             return [self._row_to_qso(row) for row in cursor.fetchall()]
 
-    def get_recent_qsos(self, count: int = 50) -> list[QSO]:
-        """Get the most recent QSOs."""
-        return self.get_all_qsos(limit=count)
+    def get_recent_qsos(self, count: int = 50, log_id: Optional[int] = None) -> list[QSO]:
+        """Get the most recent QSOs, optionally filtered by log."""
+        return self.get_all_qsos(limit=count, log_id=log_id)
 
     def search_qsos(self, callsign: str) -> list[QSO]:
         """Search for QSOs by callsign (partial match)."""
@@ -206,7 +262,8 @@ class Database:
                 UPDATE qsos SET
                     callsign = ?, frequency = ?, mode = ?,
                     rst_sent = ?, rst_received = ?, datetime_utc = ?,
-                    notes = ?, contest_id = ?, exchange_sent = ?, exchange_received = ?
+                    notes = ?, contest_id = ?, exchange_sent = ?, exchange_received = ?,
+                    log_id = ?
                 WHERE id = ?
             """,
                 (
@@ -220,6 +277,7 @@ class Database:
                     qso.contest_id,
                     qso.exchange_sent,
                     qso.exchange_received,
+                    qso.log_id,
                     qso.id,
                 ),
             )
@@ -234,20 +292,35 @@ class Database:
             conn.commit()
             return cursor.rowcount > 0
 
-    def get_qso_count(self, contest_id: Optional[int] = None) -> int:
-        """Get total QSO count."""
+    def get_qso_count(
+        self, contest_id: Optional[int] = None, log_id: Optional[int] = None
+    ) -> int:
+        """Get total QSO count, optionally filtered by contest or log."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
+            query = "SELECT COUNT(*) FROM qsos WHERE 1=1"
+            params: list = []
+
             if contest_id is not None:
-                cursor.execute(
-                    "SELECT COUNT(*) FROM qsos WHERE contest_id = ?", (contest_id,)
-                )
-            else:
-                cursor.execute("SELECT COUNT(*) FROM qsos")
+                query += " AND contest_id = ?"
+                params.append(contest_id)
+
+            if log_id is not None:
+                query += " AND log_id = ?"
+                params.append(log_id)
+
+            cursor.execute(query, params)
             return cursor.fetchone()[0]
 
     def _row_to_qso(self, row: sqlite3.Row) -> QSO:
         """Convert a database row to a QSO object."""
+        # Handle log_id which may not exist in older databases during migration
+        log_id = None
+        try:
+            log_id = row["log_id"]
+        except (KeyError, IndexError):
+            pass
+
         return QSO(
             id=row["id"],
             callsign=row["callsign"],
@@ -257,6 +330,7 @@ class Database:
             rst_received=row["rst_received"],
             datetime_utc=datetime.fromisoformat(row["datetime_utc"]),
             notes=row["notes"] or "",
+            log_id=log_id,
             contest_id=row["contest_id"],
             exchange_sent=row["exchange_sent"],
             exchange_received=row["exchange_received"],
@@ -306,3 +380,191 @@ class Database:
                     active=bool(row["active"]),
                 )
             return None
+
+    # Log methods
+    def add_log(self, log: Log) -> int:
+        """Add a new log. Returns the new log ID."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO logs (
+                    name, description, log_type, pota_ref, sota_ref, contest_id,
+                    my_callsign, my_gridsquare, location, start_time, end_time,
+                    is_active, is_archived
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    log.name,
+                    log.description,
+                    log.log_type.value,
+                    log.pota_ref,
+                    log.sota_ref,
+                    log.contest_id,
+                    log.my_callsign,
+                    log.my_gridsquare,
+                    log.location,
+                    log.start_time.isoformat() if log.start_time else None,
+                    log.end_time.isoformat() if log.end_time else None,
+                    1 if log.is_active else 0,
+                    1 if log.is_archived else 0,
+                ),
+            )
+            conn.commit()
+            return cursor.lastrowid
+
+    def get_log(self, log_id: int) -> Optional[Log]:
+        """Get a log by ID."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM logs WHERE id = ?", (log_id,))
+            row = cursor.fetchone()
+            if row:
+                log = self._row_to_log(row)
+                log.qso_count = self.get_qso_count(log_id=log_id)
+                return log
+            return None
+
+    def get_all_logs(
+        self, include_archived: bool = False, limit: int = 100
+    ) -> list[Log]:
+        """Get all logs, optionally including archived ones."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            if include_archived:
+                cursor.execute(
+                    "SELECT * FROM logs ORDER BY created_at DESC LIMIT ?", (limit,)
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT * FROM logs
+                    WHERE is_archived = 0
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                """,
+                    (limit,),
+                )
+            logs = [self._row_to_log(row) for row in cursor.fetchall()]
+            # Add QSO counts
+            for log in logs:
+                log.qso_count = self.get_qso_count(log_id=log.id)
+            return logs
+
+    def get_active_log(self) -> Optional[Log]:
+        """Get the currently active log."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM logs WHERE is_active = 1 LIMIT 1")
+            row = cursor.fetchone()
+            if row:
+                log = self._row_to_log(row)
+                log.qso_count = self.get_qso_count(log_id=log.id)
+                return log
+            return None
+
+    def set_active_log(self, log_id: Optional[int]) -> bool:
+        """Set the active log. Pass None to clear active log."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # First, clear any existing active log
+            cursor.execute("UPDATE logs SET is_active = 0 WHERE is_active = 1")
+            # Then set the new active log if provided
+            if log_id is not None:
+                cursor.execute(
+                    "UPDATE logs SET is_active = 1 WHERE id = ?", (log_id,)
+                )
+            conn.commit()
+            return True
+
+    def update_log(self, log: Log) -> bool:
+        """Update an existing log."""
+        if log.id is None:
+            return False
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE logs SET
+                    name = ?, description = ?, log_type = ?, pota_ref = ?,
+                    sota_ref = ?, contest_id = ?, my_callsign = ?, my_gridsquare = ?,
+                    location = ?, start_time = ?, end_time = ?, is_active = ?,
+                    is_archived = ?
+                WHERE id = ?
+            """,
+                (
+                    log.name,
+                    log.description,
+                    log.log_type.value,
+                    log.pota_ref,
+                    log.sota_ref,
+                    log.contest_id,
+                    log.my_callsign,
+                    log.my_gridsquare,
+                    log.location,
+                    log.start_time.isoformat() if log.start_time else None,
+                    log.end_time.isoformat() if log.end_time else None,
+                    1 if log.is_active else 0,
+                    1 if log.is_archived else 0,
+                    log.id,
+                ),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def delete_log(self, log_id: int, reassign_qsos_to: Optional[int] = None) -> bool:
+        """Delete a log. Optionally reassign QSOs to another log."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # Reassign or nullify QSOs
+            if reassign_qsos_to is not None:
+                cursor.execute(
+                    "UPDATE qsos SET log_id = ? WHERE log_id = ?",
+                    (reassign_qsos_to, log_id),
+                )
+            else:
+                cursor.execute(
+                    "UPDATE qsos SET log_id = NULL WHERE log_id = ?", (log_id,)
+                )
+            # Delete the log
+            cursor.execute("DELETE FROM logs WHERE id = ?", (log_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def archive_log(self, log_id: int) -> bool:
+        """Archive a log (soft delete)."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE logs SET is_archived = 1, is_active = 0 WHERE id = ?",
+                (log_id,),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def _row_to_log(self, row: sqlite3.Row) -> Log:
+        """Convert a database row to a Log object."""
+        return Log(
+            id=row["id"],
+            name=row["name"],
+            description=row["description"] or "",
+            log_type=LogType(row["log_type"]),
+            pota_ref=row["pota_ref"],
+            sota_ref=row["sota_ref"],
+            contest_id=row["contest_id"],
+            my_callsign=row["my_callsign"],
+            my_gridsquare=row["my_gridsquare"],
+            location=row["location"],
+            created_at=datetime.fromisoformat(row["created_at"])
+            if row["created_at"]
+            else None,
+            start_time=datetime.fromisoformat(row["start_time"])
+            if row["start_time"]
+            else None,
+            end_time=datetime.fromisoformat(row["end_time"])
+            if row["end_time"]
+            else None,
+            is_active=bool(row["is_active"]),
+            is_archived=bool(row["is_archived"]),
+        )

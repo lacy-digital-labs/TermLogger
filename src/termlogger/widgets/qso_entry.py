@@ -59,7 +59,7 @@ class QSOEntryForm(Static):
     }
 
     QSOEntryForm .callsign-input {
-        width: 12;
+        width: 16;
     }
 
     QSOEntryForm .freq-input {
@@ -85,6 +85,19 @@ class QSOEntryForm(Static):
     QSOEntryForm .notes-input {
         width: 1fr;
         margin-right: 1;
+    }
+
+    QSOEntryForm .park-input {
+        width: 14;
+    }
+
+    QSOEntryForm .pota-row {
+        height: 4;
+        margin-bottom: 0;
+    }
+
+    QSOEntryForm .pota-row.hidden {
+        display: none;
     }
 
     QSOEntryForm .dupe-warning {
@@ -200,6 +213,21 @@ class QSOEntryForm(Static):
                 classes="date-input",
             )
 
+        # POTA Row: Their park reference (for P2P contacts) - hidden by default
+        with Horizontal(classes="pota-row hidden", id="pota-row"):
+            yield Label("Their Park:")
+            yield Input(
+                placeholder="K-1234",
+                id="their_park",
+                classes="park-input",
+            )
+            yield Label("Name:")
+            yield Input(
+                placeholder="Operator name",
+                id="op_name",
+                classes="notes-input",
+            )
+
         # Row 3: Notes and More button
         with Horizontal(classes="form-row"):
             yield Label("Notes:")
@@ -300,6 +328,10 @@ class QSOEntryForm(Static):
         date_str = self.query_one("#date", Input).value.strip()
         notes = self.query_one("#notes", Input).value.strip()
 
+        # Get POTA fields (may be hidden but still accessible)
+        their_park = self.query_one("#their_park", Input).value.strip().upper()
+        op_name = self.query_one("#op_name", Input).value.strip()
+
         # Validate required fields
         if not callsign:
             self.query_one("#status", Static).update("[red]Callsign required[/red]")
@@ -324,17 +356,28 @@ class QSOEntryForm(Static):
         except ValueError:
             datetime_utc = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        # Create QSO with extended fields
-        qso = QSO(
-            callsign=callsign,
-            frequency=frequency,
-            mode=Mode(mode_value),
-            rst_sent=rst_sent or "59",
-            rst_received=rst_received or "59",
-            datetime_utc=datetime_utc,
-            notes=notes,
-            **self._extended_fields,  # Include extended fields
-        )
+        # Build QSO fields
+        qso_fields = {
+            "callsign": callsign,
+            "frequency": frequency,
+            "mode": Mode(mode_value),
+            "rst_sent": rst_sent or "59",
+            "rst_received": rst_received or "59",
+            "datetime_utc": datetime_utc,
+            "notes": notes,
+        }
+
+        # Add POTA fields if present
+        if their_park:
+            qso_fields["pota_ref"] = their_park
+        if op_name:
+            qso_fields["name"] = op_name
+
+        # Include extended fields
+        qso_fields.update(self._extended_fields)
+
+        # Create QSO
+        qso = QSO(**qso_fields)
 
         # Emit message
         self.post_message(self.QSOLogged(qso))
@@ -346,6 +389,8 @@ class QSOEntryForm(Static):
         """Clear the form for a new QSO."""
         self.query_one("#callsign", Input).value = ""
         self.query_one("#notes", Input).value = ""
+        self.query_one("#their_park", Input).value = ""
+        self.query_one("#op_name", Input).value = ""
         self.query_one("#status", Static).update("")
         self._is_dupe = False
         self._extended_fields = {}  # Clear extended fields
@@ -359,3 +404,34 @@ class QSOEntryForm(Static):
     def set_mode(self, mode: str) -> None:
         """Set the mode field."""
         self.query_one("#mode", Select).value = mode
+
+    def set_pota_mode(self, enabled: bool) -> None:
+        """Show or hide POTA-specific fields.
+
+        Args:
+            enabled: True to show POTA fields, False to hide
+        """
+        pota_row = self.query_one("#pota-row")
+        if enabled:
+            pota_row.remove_class("hidden")
+        else:
+            pota_row.add_class("hidden")
+            # Clear values when hiding
+            self.query_one("#their_park", Input).value = ""
+            self.query_one("#op_name", Input).value = ""
+
+    def set_their_park(self, park_ref: str) -> None:
+        """Set the 'their park' field (for P2P contacts).
+
+        Args:
+            park_ref: Park reference like K-1234
+        """
+        self.query_one("#their_park", Input).value = park_ref.upper() if park_ref else ""
+
+    def set_op_name(self, name: str) -> None:
+        """Set the operator name field.
+
+        Args:
+            name: Operator name
+        """
+        self.query_one("#op_name", Input).value = name or ""

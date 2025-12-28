@@ -25,6 +25,14 @@ class DXClusterSource(str, Enum):
     BOTH = "both"
 
 
+class RigControlType(str, Enum):
+    """Rig control backend types."""
+
+    NONE = "none"
+    RIGCTLD = "rigctld"  # Hamlib rigctld daemon
+    FLEXRADIO = "flexradio"  # Flex Radio SmartSDR API
+
+
 class AppConfig(BaseModel):
     """Application configuration."""
 
@@ -67,6 +75,35 @@ class AppConfig(BaseModel):
     dx_cluster_port: int = Field(default=7373, ge=1, le=65535)
     dx_cluster_callsign: str = Field(default="")  # Uses my_callsign if empty
     dx_cluster_refresh_seconds: int = Field(default=30, ge=10, le=300)
+
+    # Rig Control
+    rig_control_type: RigControlType = RigControlType.NONE
+    rig_auto_qsy: bool = Field(default=True)  # QSY radio on spot click
+    rig_poll_interval: float = Field(default=0.5, ge=0.1, le=5.0)
+
+    # Rig Control - rigctld settings
+    rigctld_host: str = Field(default="localhost")
+    rigctld_port: int = Field(default=4532, ge=1, le=65535)
+
+    # Rig Control - Flex Radio settings
+    flexradio_host: str = Field(default="localhost")
+    flexradio_port: int = Field(default=4992, ge=1, le=65535)
+
+    # Legacy compatibility (maps to rig_control_type)
+    @property
+    def rigctld_enabled(self) -> bool:
+        """Legacy property for rigctld_enabled."""
+        return self.rig_control_type == RigControlType.RIGCTLD
+
+    @property
+    def rigctld_auto_qsy(self) -> bool:
+        """Legacy property for rigctld_auto_qsy."""
+        return self.rig_auto_qsy
+
+    @property
+    def rigctld_poll_interval(self) -> float:
+        """Legacy property for rigctld_poll_interval."""
+        return self.rig_poll_interval
 
 
 def get_config_dir() -> Path:

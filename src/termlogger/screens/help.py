@@ -79,6 +79,32 @@ Configure credentials in **Settings** (Ctrl+S):
 
 ---
 
+## Rig Control
+
+Connect TermLogger to your radio for automatic tracking and QSY control.
+
+**Supported Backends:**
+- **Hamlib (rigctld)** - 200+ radios via TCP
+- **Flex Radio** - SmartSDR API via network
+
+**Features:**
+- Band indicator shows current frequency/band
+- Frequency updates when tabbing to frequency field
+- Auto-QSY: click a spot to change radio frequency
+
+**Setup:**
+1. Go to **Settings** (Ctrl+S) → **Rig** tab
+2. Select control type (rigctld or Flex Radio)
+3. Enter host/port settings
+4. Enable Auto-QSY if desired
+
+**rigctld Example:**
+```
+rigctld -m 3073 -r /dev/ttyUSB0
+```
+
+---
+
 ## Tips
 
 - Keep hands on keyboard for fast logging
@@ -239,7 +265,7 @@ class SplashScreen(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static(LOGO, classes="logo")
-            yield Static("Version 25.12.01", classes="version")
+            yield Static("Version 25.12.02", classes="version")
             yield Static("Terminal-Based Amateur Radio Logging", classes="tagline")
             yield Static("Created by Stacy Lacy", classes="attribution")
             yield Static("Lacy Digital Labs, LLC", classes="company")

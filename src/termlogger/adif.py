@@ -547,3 +547,164 @@ def export_adif_file(
         f.write(adif_data)
 
     return len(qsos)
+
+
+def qso_to_pota_adif(
+    qso: QSO,
+    my_callsign: str,
+    my_park_ref: str,
+    my_state: str = "",
+    my_grid: str = "",
+) -> str:
+    """Convert a QSO to a POTA-formatted ADIF record.
+
+    This includes POTA-specific fields MY_SIG and MY_SIG_INFO.
+
+    Args:
+        qso: QSO object to convert
+        my_callsign: Operator's callsign
+        my_park_ref: Park reference being activated (e.g., "K-1234")
+        my_state: Operator's state
+        my_grid: Operator's grid square
+
+    Returns:
+        POTA-formatted ADIF record string
+    """
+    fields = []
+
+    # Required POTA fields
+    fields.append(generate_adif_field("CALL", qso.callsign.upper()))
+    fields.append(generate_adif_field("QSO_DATE", qso.datetime_utc.strftime("%Y%m%d")))
+    fields.append(generate_adif_field("TIME_ON", qso.datetime_utc.strftime("%H%M%S")))
+    fields.append(generate_adif_field("MODE", qso.mode.value))
+
+    # Band (required by POTA)
+    if qso.band:
+        fields.append(generate_adif_field("BAND", qso.band.value))
+
+    # Frequency
+    fields.append(generate_adif_field("FREQ", f"{qso.frequency:.6f}"))
+
+    # RST
+    fields.append(generate_adif_field("RST_SENT", qso.rst_sent))
+    fields.append(generate_adif_field("RST_RCVD", qso.rst_received))
+
+    # POTA-specific: My activation info
+    fields.append(generate_adif_field("MY_SIG", "POTA"))
+    fields.append(generate_adif_field("MY_SIG_INFO", my_park_ref.upper()))
+    fields.append(generate_adif_field("STATION_CALLSIGN", my_callsign.upper()))
+    fields.append(generate_adif_field("OPERATOR", my_callsign.upper()))
+
+    if my_state:
+        fields.append(generate_adif_field("MY_STATE", my_state.upper()))
+    if my_grid:
+        fields.append(generate_adif_field("MY_GRIDSQUARE", my_grid.upper()))
+
+    # Park-to-Park (P2P) - if the contacted station was also at a park
+    if qso.pota_ref or qso.sig_info:
+        park_ref = qso.pota_ref or qso.sig_info
+        fields.append(generate_adif_field("SIG", "POTA"))
+        fields.append(generate_adif_field("SIG_INFO", park_ref.upper()))
+
+    # Optional fields
+    if qso.name:
+        fields.append(generate_adif_field("NAME", qso.name))
+    if qso.state:
+        fields.append(generate_adif_field("STATE", qso.state))
+    if qso.gridsquare:
+        fields.append(generate_adif_field("GRIDSQUARE", qso.gridsquare))
+    if qso.notes:
+        fields.append(generate_adif_field("COMMENT", qso.notes))
+
+    # End of record
+    fields.append("<EOR>")
+
+    return " ".join(fields)
+
+
+def generate_pota_adif(
+    qsos: list[QSO],
+    my_callsign: str,
+    my_park_ref: str,
+    my_state: str = "",
+    my_grid: str = "",
+) -> str:
+    """Generate POTA-formatted ADIF data.
+
+    Args:
+        qsos: List of QSO objects
+        my_callsign: Operator's callsign
+        my_park_ref: Park reference being activated
+        my_state: Operator's state
+        my_grid: Operator's grid square
+
+    Returns:
+        POTA-formatted ADIF string
+    """
+    lines = [generate_adif_header()]
+
+    for qso in qsos:
+        lines.append(qso_to_pota_adif(qso, my_callsign, my_park_ref, my_state, my_grid))
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def get_pota_filename(
+    callsign: str,
+    park_ref: str,
+    activation_date: Optional[datetime] = None,
+) -> str:
+    """Generate a POTA-compliant filename.
+
+    Format: callsign@park-YYYYMMDD.adi
+
+    Args:
+        callsign: Operator's callsign
+        park_ref: Park reference (e.g., "K-1234")
+        activation_date: Date of activation (defaults to today)
+
+    Returns:
+        POTA filename string
+    """
+    if activation_date is None:
+        activation_date = datetime.now(timezone.utc)
+
+    date_str = activation_date.strftime("%Y%m%d")
+    # Replace slashes in callsign (portable indicators)
+    safe_callsign = callsign.replace("/", "-")
+    return f"{safe_callsign}@{park_ref}-{date_str}.adi"
+
+
+def export_pota_adif(
+    qsos: list[QSO],
+    filepath: str | Path,
+    my_callsign: str,
+    my_park_ref: str,
+    my_state: str = "",
+    my_grid: str = "",
+) -> int:
+    """Export QSOs to a POTA-formatted ADIF file.
+
+    Args:
+        qsos: List of QSO objects to export
+        filepath: Path to the output file
+        my_callsign: Operator's callsign
+        my_park_ref: Park reference being activated
+        my_state: Operator's state
+        my_grid: Operator's grid square
+
+    Returns:
+        Number of QSOs exported
+    """
+    path = Path(filepath)
+
+    if path.suffix.lower() not in (".adi", ".adif"):
+        path = path.with_suffix(".adi")
+
+    adif_data = generate_pota_adif(qsos, my_callsign, my_park_ref, my_state, my_grid)
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(adif_data)
+
+    return len(qsos)
