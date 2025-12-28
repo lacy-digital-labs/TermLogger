@@ -21,18 +21,37 @@ A terminal-based amateur radio logging application built with Python and Textual
 
 ## Installation
 
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/TermLogger.git
-cd TermLogger
+### Recommended: pipx (isolated environment)
 
-# Create a virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
+```bash
+# Install pipx if you don't have it
+pip install --user pipx
+pipx ensurepath
 
 # Install TermLogger
-pip install -e .
+pipx install termlogger
 ```
+
+### Alternative: pip
+
+```bash
+pip install termlogger
+```
+
+### From Source (for development)
+
+```bash
+git clone https://github.com/lacy-digital-labs/TermLogger.git
+cd TermLogger
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+### Requirements
+
+- Python 3.11 or later
+- A terminal with Unicode support
 
 ## Usage
 
