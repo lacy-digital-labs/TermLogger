@@ -1,5 +1,6 @@
 """QSO entry form widget."""
 
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -11,6 +12,8 @@ from textual.message import Message
 from textual.widgets import Button, Input, Label, Select, Static
 
 from ..models import Mode, QSO
+
+logger = logging.getLogger(__name__)
 
 
 class QSOEntryForm(Static):
@@ -279,11 +282,13 @@ class QSOEntryForm(Static):
     @on(Input.Submitted)
     def _on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle Enter key in any input field."""
+        logger.info(f"Input submitted event received from field: {event.input.id}")
         self._log_qso()
 
     @on(Button.Pressed, "#log-qso")
     def _on_log_button(self) -> None:
         """Handle Log QSO button press."""
+        logger.info("Log QSO button pressed - calling _log_qso()")
         self._log_qso()
 
     @on(Button.Pressed, "#more-fields")
@@ -319,71 +324,90 @@ class QSOEntryForm(Static):
 
     def _log_qso(self) -> None:
         """Validate and log the QSO."""
-        callsign = self.query_one("#callsign", Input).value.strip().upper()
-        freq_str = self.query_one("#frequency", Input).value.strip()
-        mode_value = self.query_one("#mode", Select).value
-        rst_sent = self.query_one("#rst_sent", Input).value.strip()
-        rst_received = self.query_one("#rst_received", Input).value.strip()
-        time_str = self.query_one("#time", Input).value.strip()
-        date_str = self.query_one("#date", Input).value.strip()
-        notes = self.query_one("#notes", Input).value.strip()
-
-        # Get POTA fields (may be hidden but still accessible)
-        their_park = self.query_one("#their_park", Input).value.strip().upper()
-        op_name = self.query_one("#op_name", Input).value.strip()
-
-        # Validate required fields
-        if not callsign:
-            self.query_one("#status", Static).update("[red]Callsign required[/red]")
-            self.query_one("#callsign", Input).focus()
-            return
-
-        if not freq_str:
-            self.query_one("#status", Static).update("[red]Frequency required[/red]")
-            self.query_one("#frequency", Input).focus()
-            return
+        logger.info("_log_qso called - starting QSO validation")
 
         try:
-            frequency = float(freq_str)
-        except ValueError:
-            self.query_one("#status", Static).update("[red]Invalid frequency[/red]")
-            self.query_one("#frequency", Input).focus()
-            return
+            callsign = self.query_one("#callsign", Input).value.strip().upper()
+            freq_str = self.query_one("#frequency", Input).value.strip()
+            mode_value = self.query_one("#mode", Select).value
+            rst_sent = self.query_one("#rst_sent", Input).value.strip()
+            rst_received = self.query_one("#rst_received", Input).value.strip()
+            time_str = self.query_one("#time", Input).value.strip()
+            date_str = self.query_one("#date", Input).value.strip()
+            notes = self.query_one("#notes", Input).value.strip()
 
-        # Parse datetime
-        try:
-            datetime_utc = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
-        except ValueError:
-            datetime_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+            logger.debug(f"QSO data: callsign={callsign}, freq={freq_str}, mode={mode_value}")
 
-        # Build QSO fields
-        qso_fields = {
-            "callsign": callsign,
-            "frequency": frequency,
-            "mode": Mode(mode_value),
-            "rst_sent": rst_sent or "59",
-            "rst_received": rst_received or "59",
-            "datetime_utc": datetime_utc,
-            "notes": notes,
-        }
+            # Get POTA fields (may be hidden but still accessible)
+            their_park = self.query_one("#their_park", Input).value.strip().upper()
+            op_name = self.query_one("#op_name", Input).value.strip()
 
-        # Add POTA fields if present
-        if their_park:
-            qso_fields["pota_ref"] = their_park
-        if op_name:
-            qso_fields["name"] = op_name
+            # Validate required fields
+            if not callsign:
+                logger.warning("Validation failed: Callsign required")
+                self.query_one("#status", Static).update("[red]Callsign required[/red]")
+                self.query_one("#callsign", Input).focus()
+                return
 
-        # Include extended fields
-        qso_fields.update(self._extended_fields)
+            if not freq_str:
+                logger.warning("Validation failed: Frequency required")
+                self.query_one("#status", Static).update("[red]Frequency required[/red]")
+                self.query_one("#frequency", Input).focus()
+                return
 
-        # Create QSO
-        qso = QSO(**qso_fields)
+            try:
+                frequency = float(freq_str)
+                logger.debug(f"Frequency parsed: {frequency}")
+            except ValueError:
+                logger.warning(f"Validation failed: Invalid frequency '{freq_str}'")
+                self.query_one("#status", Static).update("[red]Invalid frequency[/red]")
+                self.query_one("#frequency", Input).focus()
+                return
 
-        # Emit message
-        self.post_message(self.QSOLogged(qso))
+            # Parse datetime
+            try:
+                datetime_utc = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+                logger.debug(f"Datetime parsed: {datetime_utc}")
+            except ValueError as e:
+                logger.debug(f"Datetime parse failed, using current time: {e}")
+                datetime_utc = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        # Clear form for next QSO
-        self.clear_form()
+            # Build QSO fields
+            qso_fields = {
+                "callsign": callsign,
+                "frequency": frequency,
+                "mode": Mode(mode_value),
+                "rst_sent": rst_sent or "59",
+                "rst_received": rst_received or "59",
+                "datetime_utc": datetime_utc,
+                "notes": notes,
+            }
+
+            # Add POTA fields if present
+            if their_park:
+                qso_fields["pota_ref"] = their_park
+            if op_name:
+                qso_fields["name"] = op_name
+
+            # Include extended fields
+            qso_fields.update(self._extended_fields)
+
+            logger.debug(f"Creating QSO object with fields: {qso_fields.keys()}")
+            # Create QSO
+            qso = QSO(**qso_fields)
+
+            # Emit message
+            logger.info(f"Posting QSOLogged message for {callsign}")
+            self.post_message(self.QSOLogged(qso))
+
+            # Clear form for next QSO
+            logger.debug("Clearing form")
+            self.clear_form()
+            logger.info("QSO logging completed successfully")
+
+        except Exception as e:
+            logger.error(f"Exception in _log_qso: {e}", exc_info=True)
+            self.query_one("#status", Static).update(f"[red]Error: {e}[/red]")
 
     def clear_form(self) -> None:
         """Clear the form for a new QSO."""

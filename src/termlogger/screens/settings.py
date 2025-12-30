@@ -518,6 +518,42 @@ class SettingsScreen(Screen):
                             classes="help-text",
                         )
 
+                    with Vertical(classes="settings-section"):
+                        yield Static("Debugging", classes="section-title")
+
+                        with Horizontal(classes="field-row"):
+                            yield Checkbox(
+                                "Enable Debug Logging",
+                                value=self.config.debug_logging_enabled,
+                                id="debug_logging_enabled",
+                            )
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Log Level:")
+                            yield Select(
+                                [
+                                    ("DEBUG", "DEBUG"),
+                                    ("INFO", "INFO"),
+                                    ("WARNING", "WARNING"),
+                                    ("ERROR", "ERROR"),
+                                ],
+                                value=self.config.debug_log_level,
+                                id="debug_log_level",
+                            )
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Log File:")
+                            yield Input(
+                                value=self.config.debug_log_file,
+                                placeholder="termlogger.log",
+                                id="debug_log_file",
+                            )
+
+                        yield Static(
+                            "Logs are written to the configured file. Restart required for changes to take effect.",
+                            classes="help-text",
+                        )
+
         with Horizontal(classes="button-row"):
             yield Button("Cancel", variant="default", id="cancel")
             yield Button("Save", variant="primary", id="save")
@@ -646,6 +682,10 @@ class SettingsScreen(Screen):
             rigctld_port=rigctld_port,
             flexradio_host=self.query_one("#flexradio_host", Input).value.strip() or "localhost",
             flexradio_port=flexradio_port,
+            # Debug Logging
+            debug_logging_enabled=self.query_one("#debug_logging_enabled", Checkbox).value,
+            debug_log_level=self.query_one("#debug_log_level", Select).value or "INFO",
+            debug_log_file=self.query_one("#debug_log_file", Input).value.strip() or "termlogger.log",
         )
 
     @on(Button.Pressed, "#save")

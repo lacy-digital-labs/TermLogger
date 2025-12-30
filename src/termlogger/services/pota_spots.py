@@ -76,10 +76,12 @@ class POTASpotService:
     def _parse_spot(self, data: dict) -> Optional[Spot]:
         """Parse a spot from the POTA API response."""
         try:
-            # Parse frequency - POTA returns it as a string like "14.250"
+            # Parse frequency - POTA returns it in kHz (e.g., "14074" or "18145")
             freq_str = data.get("frequency", "0")
             try:
-                frequency = float(freq_str)
+                frequency_khz = float(freq_str)
+                # Convert kHz to MHz for internal storage
+                frequency = frequency_khz / 1000.0
             except (ValueError, TypeError):
                 frequency = 0.0
 

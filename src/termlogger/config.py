@@ -89,6 +89,11 @@ class AppConfig(BaseModel):
     flexradio_host: str = Field(default="localhost")
     flexradio_port: int = Field(default=4992, ge=1, le=65535)
 
+    # Debug Logging
+    debug_logging_enabled: bool = Field(default=False)
+    debug_log_level: str = Field(default="INFO")  # DEBUG, INFO, WARNING, ERROR
+    debug_log_file: str = Field(default="termlogger.log")
+
     # Legacy compatibility (maps to rig_control_type)
     @property
     def rigctld_enabled(self) -> bool:

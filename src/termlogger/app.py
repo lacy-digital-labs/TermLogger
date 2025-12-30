@@ -1,5 +1,6 @@
 """TermLogger - Terminal Amateur Radio Logging Application."""
 
+import logging
 from pathlib import Path
 
 from textual.app import App
@@ -42,6 +43,23 @@ class TermLoggerApp(App):
 
 def main() -> None:
     """Run the TermLogger application."""
+    # Load config to check debug logging settings
+    config = load_config()
+
+    # Configure logging if enabled
+    if config.debug_logging_enabled:
+        # Get log level from config (default to INFO if invalid)
+        log_level = getattr(logging, config.debug_log_level, logging.INFO)
+
+        logging.basicConfig(
+            filename=config.debug_log_file,
+            level=log_level,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+
+        logger = logging.getLogger(__name__)
+        logger.info(f"TermLogger starting with debug logging enabled (level: {config.debug_log_level})")
+
     app = TermLoggerApp()
     app.run()
 

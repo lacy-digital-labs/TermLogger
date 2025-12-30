@@ -179,9 +179,11 @@ class RigctldService:
                 return response.decode().strip()
 
             except asyncio.TimeoutError:
+                logger.error(f"Timeout waiting for response to '{command}'")
                 raise RigctldError(f"Timeout waiting for response to '{command}'")
             except Exception as e:
                 self._connected = False
+                logger.error(f"Connection lost while executing '{command}': {e}")
                 raise RigctldConnectionError(f"Connection lost: {e}")
 
     async def get_frequency(self) -> float:
@@ -202,11 +204,28 @@ class RigctldService:
         Args:
             freq_hz: Frequency in Hz
         """
-        response = await self._send_command(f"{self.CMD_SET_FREQ} {int(freq_hz)}")
-        if response and response.startswith("RPRT"):
+        freq_int = int(freq_hz)
+        response = await self._send_command(f"{self.CMD_SET_FREQ} {freq_int}")
+
+        # Validate response - rigctld should return "RPRT N" where N is error code
+        if not response:
+            logger.error("Empty response from rigctld when setting frequency")
+            raise RigctldError("Empty response from rigctld when setting frequency")
+
+        if not response.startswith("RPRT"):
+            logger.error(f"Unexpected response format from rigctld: {response}")
+            raise RigctldError(f"Unexpected response format: {response}")
+
+        # Parse error code
+        try:
             code = int(response.split()[1])
-            if code != 0:
-                raise RigctldError(f"Failed to set frequency: error {code}")
+        except (IndexError, ValueError) as e:
+            logger.error(f"Failed to parse RPRT code from response: {response}")
+            raise RigctldError(f"Failed to parse response: {response}")
+
+        if code != 0:
+            logger.error(f"Rigctld returned error code {code} when setting frequency")
+            raise RigctldError(f"Failed to set frequency: error {code}")
 
     async def set_frequency_mhz(self, freq_mhz: float) -> None:
         """Set VFO frequency in MHz.
@@ -222,25 +241,43 @@ class RigctldService:
         Returns:
             Tuple of (mode_name, passband_hz)
         """
-        response = await self._send_command(self.CMD_GET_MODE)
-        # Response format: "USB\n2400" or just "USB"
-        parts = response.split()
-        if parts:
-            mode = parts[0]
-            # Read second line for passband if available
-            if self._reader:
+        if not self._connected or not self._writer or not self._reader:
+            raise RigctldConnectionError("Not connected to rigctld")
+
+        # IMPORTANT: Must read both lines under the same lock to prevent interleaving
+        async with self._lock:
+            try:
+                # Send command
+                self._writer.write(f"{self.CMD_GET_MODE}\n".encode())
+                await self._writer.drain()
+
+                # Read first line (mode)
+                mode_line = await asyncio.wait_for(
+                    self._reader.readline(),
+                    timeout=self.TIMEOUT,
+                )
+                mode_str = mode_line.decode().strip()
+
+                # Read second line (passband) - rigctld sends this on a separate line
                 try:
                     passband_line = await asyncio.wait_for(
                         self._reader.readline(),
                         timeout=0.5,
                     )
-                    passband = int(passband_line.decode().strip())
+                    passband_str = passband_line.decode().strip()
+                    passband = int(passband_str)
                 except (asyncio.TimeoutError, ValueError):
                     passband = 0
-            else:
-                passband = 0
-            return mode, passband
-        raise RigctldError(f"Invalid mode response: {response}")
+
+                return mode_str, passband
+
+            except asyncio.TimeoutError:
+                logger.error(f"Timeout waiting for response to '{self.CMD_GET_MODE}'")
+                raise RigctldError(f"Timeout waiting for response to '{self.CMD_GET_MODE}'")
+            except Exception as e:
+                self._connected = False
+                logger.error(f"Connection lost while executing '{self.CMD_GET_MODE}': {e}")
+                raise RigctldConnectionError(f"Connection lost: {e}")
 
     async def set_mode(self, mode: str, passband: int = 0) -> None:
         """Set operating mode.
@@ -250,10 +287,26 @@ class RigctldService:
             passband: Passband width in Hz (0 for default)
         """
         response = await self._send_command(f"{self.CMD_SET_MODE} {mode} {passband}")
-        if response and response.startswith("RPRT"):
+
+        # Validate response - rigctld should return "RPRT N" where N is error code
+        if not response:
+            logger.error("Empty response from rigctld when setting mode")
+            raise RigctldError("Empty response from rigctld when setting mode")
+
+        if not response.startswith("RPRT"):
+            logger.error(f"Unexpected response format from rigctld: {response}")
+            raise RigctldError(f"Unexpected response format: {response}")
+
+        # Parse error code
+        try:
             code = int(response.split()[1])
-            if code != 0:
-                raise RigctldError(f"Failed to set mode: error {code}")
+        except (IndexError, ValueError) as e:
+            logger.error(f"Failed to parse RPRT code from response: {response}")
+            raise RigctldError(f"Failed to parse response: {response}")
+
+        if code != 0:
+            logger.error(f"Rigctld returned error code {code} when setting mode")
+            raise RigctldError(f"Failed to set mode: error {code}")
 
     async def get_state(self) -> RigState:
         """Get complete rig state (frequency and mode).

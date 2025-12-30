@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.events import Focus
@@ -704,39 +705,57 @@ class MainScreen(Screen):
                 severity="warning",
             )
 
+    @on(QSOEntryForm.QSOLogged)
     def on_qso_entry_form_qso_logged(self, event: QSOEntryForm.QSOLogged) -> None:
         """Handle QSO logged event."""
-        # If in a mode, set exchange sent
-        if self._current_mode:
-            event.qso.exchange_sent = self._current_mode.format_exchange_sent()
+        try:
+            logger.info(f"QSO logging handler called for {event.qso.callsign} on {event.qso.frequency:.3f} MHz")
 
-        # Save to database with active log
-        qso_id = self.db.add_qso(event.qso, log_id=self._active_log_id)
-        event.qso.id = qso_id
-        event.qso.log_id = self._active_log_id
+            # If in a mode, set exchange sent
+            if self._current_mode:
+                logger.debug(f"Setting exchange sent for mode: {self._current_mode}")
+                event.qso.exchange_sent = self._current_mode.format_exchange_sent()
 
-        # Add to current mode if active
-        if self._current_mode:
-            self._current_mode.add_qso(event.qso)
-            self.query_one(ModeStatus).refresh_status()
+            # Save to database with active log
+            logger.debug(f"Saving QSO to database (log_id={self._active_log_id})")
+            qso_id = self.db.add_qso(event.qso, log_id=self._active_log_id)
+            logger.info(f"QSO saved to database with ID: {qso_id}")
 
-        # Add to table
-        self.query_one(QSOTable).add_qso(event.qso)
+            event.qso.id = qso_id
+            event.qso.log_id = self._active_log_id
 
-        # Update status bar with log-filtered count
-        count = self.db.get_qso_count(log_id=self._active_log_id)
-        self.query_one(StatusBar).set_qso_count(count)
+            # Add to current mode if active
+            if self._current_mode:
+                logger.debug("Adding QSO to current mode")
+                self._current_mode.add_qso(event.qso)
+                self.query_one(ModeStatus).refresh_status()
 
-        # Update log status with new count
-        if self._active_log_id:
-            active_log = self.db.get_active_log()
-            if active_log:
-                self.query_one(LogStatus).set_log(active_log.display_name, active_log.qso_count)
+            # Add to table
+            logger.debug("Adding QSO to table")
+            self.query_one(QSOTable).add_qso(event.qso)
 
-        # Clear callsign info
-        self.query_one(CallsignInfo).clear()
+            # Update status bar with log-filtered count
+            logger.debug("Updating status bar")
+            count = self.db.get_qso_count(log_id=self._active_log_id)
+            self.query_one(StatusBar).set_qso_count(count)
 
-        self.notify(f"Logged {event.qso.callsign}", timeout=2)
+            # Update log status with new count
+            if self._active_log_id:
+                logger.debug("Updating log status")
+                active_log = self.db.get_active_log()
+                if active_log:
+                    self.query_one(LogStatus).set_log(active_log.display_name, active_log.qso_count)
+
+            # Clear callsign info
+            logger.debug("Clearing callsign info")
+            self.query_one(CallsignInfo).clear()
+
+            logger.info(f"QSO logging completed successfully for {event.qso.callsign}")
+            self.notify(f"Logged {event.qso.callsign}", timeout=2)
+
+        except Exception as e:
+            logger.error(f"QSO logging failed: {e}", exc_info=True)
+            self.notify(f"Failed to log QSO: {e}", severity="error", timeout=5)
 
     def on_qso_entry_form_callsign_changed(
         self, event: QSOEntryForm.CallsignChanged
@@ -765,11 +784,11 @@ class MainScreen(Screen):
         # Cancel any pending lookup
         self._cancel_lookup()
 
-        # Start new lookup worker
+        # Start new lookup worker (non-exclusive to not block QSY)
         self._lookup_worker = self.run_worker(
             self._lookup_callsign_async(callsign),
             name=f"lookup_{callsign}",
-            exclusive=True,
+            exclusive=False,
         )
 
     async def _lookup_callsign_async(self, callsign: str) -> Optional[CallsignLookupResult]:
