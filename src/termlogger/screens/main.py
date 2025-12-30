@@ -39,6 +39,7 @@ from ..services import (
 from ..widgets.qso_entry import QSOEntryForm
 from ..widgets.qso_table import QSOTable
 from ..widgets.spots_table import SpotsTable
+from ..widgets.tune_dialog import ManualTuneModal
 from .file_picker import ExportCompleteScreen, FilePickerScreen
 from .log_browser import LogBrowserScreen
 from .mode_setup import (
@@ -264,6 +265,7 @@ class MainScreen(Screen):
         ("ctrl+e", "export_adif", "Export ADIF"),
         ("ctrl+i", "import_adif", "Import ADIF"),
         ("ctrl+p", "export_pota", "Export POTA"),
+        ("ctrl+f", "manual_tune", "Tune"),
     ]
 
     CSS = """
@@ -1135,6 +1137,154 @@ class MainScreen(Screen):
             ),
             handle_export,
         )
+
+    def action_manual_tune(self) -> None:
+        """Open manual tune dialog for frequency and mode control."""
+        # Get current frequency and mode
+        current_freq = None
+        current_mode = None
+
+        # Try to get from rig if connected
+        rig_type = self.app.config.rig_control_type
+        if rig_type == RigControlType.RIGCTLD and self._rigctld_service:
+            state = self._rigctld_service.last_state
+            if self._rigctld_service.is_connected and state:
+                current_freq = state.frequency_mhz
+                # Map rigctld mode back to our Mode enum
+                rig_mode = state.mode
+                if rig_mode in ["USB", "LSB"]:
+                    current_mode = "SSB"
+                elif rig_mode in ["CW", "CWR"]:
+                    current_mode = "CW"
+                elif rig_mode in ["PKTUSB", "DIGU", "DIGL"]:
+                    current_mode = "FT8"
+                else:
+                    current_mode = rig_mode
+        elif rig_type == RigControlType.FLEXRADIO and self._flexradio_service:
+            state = self._flexradio_service.last_state
+            if self._flexradio_service.is_connected and state:
+                current_freq = state.frequency_mhz
+                # Map Flex mode back to our Mode enum
+                flex_mode = state.mode
+                if flex_mode in ["USB", "LSB"]:
+                    current_mode = "SSB"
+                elif flex_mode in ["CW", "CWL"]:
+                    current_mode = "CW"
+                elif flex_mode in ["DIGU", "DIGL"]:
+                    current_mode = "FT8"
+                else:
+                    current_mode = flex_mode
+
+        # Fall back to QSO form values if rig not available
+        if current_freq is None:
+            try:
+                freq_str = self.query_one("#frequency", Input).value.strip()
+                if freq_str:
+                    current_freq = float(freq_str)
+            except (ValueError, Exception):
+                current_freq = 14.250  # Default
+
+        if current_mode is None:
+            try:
+                from ..widgets.qso_entry import QSOEntryForm
+                form = self.query_one(QSOEntryForm)
+                current_mode = form.query_one("#mode").value
+            except Exception:
+                current_mode = "SSB"  # Default
+
+        def handle_tune(result: dict) -> None:
+            """Handle the tune dialog result."""
+            if not result:
+                return  # User cancelled
+
+            frequency = result.get("frequency")
+            mode = result.get("mode")
+
+            if frequency is None or mode is None:
+                return
+
+            # Update QSO form
+            try:
+                form = self.query_one(QSOEntryForm)
+                form.set_frequency(frequency)
+                form.set_mode(mode)
+            except Exception as e:
+                logger.error(f"Failed to update QSO form: {e}")
+
+            # Send to rig if configured
+            rig_type = self.app.config.rig_control_type
+            if rig_type == RigControlType.RIGCTLD and self._rigctld_service:
+                if self._rigctld_service.is_connected:
+                    self.run_worker(
+                        self._tune_rigctld(frequency, mode),
+                        name="tune_rigctld",
+                        exclusive=False,
+                    )
+            elif rig_type == RigControlType.FLEXRADIO and self._flexradio_service:
+                if self._flexradio_service.is_connected:
+                    self.run_worker(
+                        self._tune_flexradio(frequency, mode),
+                        name="tune_flexradio",
+                        exclusive=False,
+                    )
+
+        # Show the modal
+        self.app.push_screen(
+            ManualTuneModal(current_frequency=current_freq, current_mode=current_mode),
+            handle_tune,
+        )
+
+    async def _tune_rigctld(self, frequency: float, mode: str) -> None:
+        """Tune rigctld radio to frequency and mode."""
+        try:
+            if self._rigctld_service:
+                # Set frequency
+                await self._rigctld_service.set_frequency_mhz(frequency)
+
+                # Map mode to rigctld mode
+                rig_mode = RigctldService.map_mode_to_rigctld(mode, frequency)
+                await self._rigctld_service.set_mode(rig_mode)
+
+                logger.info(f"Tuned rigctld to {frequency:.3f} MHz {mode}")
+                self.app.call_later(
+                    self.notify,
+                    f"Tuned to {frequency:.3f} MHz {mode}",
+                    timeout=2,
+                )
+        except Exception as e:
+            logger.error(f"Failed to tune rigctld: {e}")
+            self.app.call_later(
+                self.notify,
+                f"Tune failed: {e}",
+                severity="warning",
+                timeout=3,
+            )
+
+    async def _tune_flexradio(self, frequency: float, mode: str) -> None:
+        """Tune Flex Radio to frequency and mode."""
+        try:
+            if self._flexradio_service:
+                # Set frequency
+                await self._flexradio_service.set_frequency_mhz(frequency)
+
+                # Map mode to Flex mode
+                flex_mode = FlexRadioService.map_mode_to_flex(mode, frequency)
+                await self._flexradio_service.set_mode(flex_mode)
+
+                logger.info(f"Tuned Flex Radio to {frequency:.3f} MHz {mode}")
+                self.app.call_later(
+                    self.notify,
+                    f"Tuned to {frequency:.3f} MHz {mode}",
+                    timeout=2,
+                )
+        except Exception as e:
+            logger.error(f"Failed to tune Flex Radio: {e}")
+            self.app.call_later(
+                self.notify,
+                f"Tune failed: {e}",
+                severity="warning",
+                timeout=3,
+            )
 
     def action_quit(self) -> None:
         """Quit the application."""
