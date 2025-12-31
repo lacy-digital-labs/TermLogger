@@ -291,7 +291,8 @@ class LogBrowserScreen(Screen):
     """
 
     COLUMNS = [
-        ("#", 5),
+        ("Row", 4),
+        ("ID", 5),
         ("Date", 12),
         ("Time", 7),
         ("Callsign", 12),
@@ -299,7 +300,7 @@ class LogBrowserScreen(Screen):
         ("Mode", 8),
         ("RST S", 6),
         ("RST R", 6),
-        ("Notes", 25),
+        ("Notes", 20),
     ]
 
     def __init__(self, db: Database) -> None:
@@ -349,12 +350,13 @@ class LogBrowserScreen(Screen):
         self._update_status()
 
     def _refresh_table(self) -> None:
-        """Refresh the table display."""
+        """Refresh the table display (newest QSOs first)."""
         table = self.query_one(DataTable)
         table.clear()
 
-        for qso in self._qsos:
+        for row_num, qso in enumerate(self._qsos, 1):
             table.add_row(
+                str(row_num),
                 str(qso.id or ""),
                 qso.date_str,
                 qso.time_str,
@@ -363,7 +365,7 @@ class LogBrowserScreen(Screen):
                 qso.mode.value,
                 qso.rst_sent,
                 qso.rst_received,
-                (qso.notes[:25] + "...") if len(qso.notes) > 25 else qso.notes,
+                (qso.notes[:20] + "...") if len(qso.notes) > 20 else qso.notes,
                 key=str(qso.id) if qso.id else None,
             )
 
