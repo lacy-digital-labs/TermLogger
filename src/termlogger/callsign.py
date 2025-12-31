@@ -143,7 +143,7 @@ class QRZXMLLookup(CallsignLookupProvider):
                 if error_elem is not None:
                     error_text = error_elem.text or ""
                     if "Session Timeout" in error_text or "Invalid session" in error_text:
-                        logger.warning(f"QRZ: Session expired, re-authenticating")
+                        logger.warning("QRZ: Session expired, re-authenticating")
                         # Re-authenticate and retry
                         self._session_key = None
                         if await self.authenticate():
@@ -254,11 +254,11 @@ class HamQTHLookup(CallsignLookupProvider):
         logger.debug(f"HamQTH _find: original='{path}', namespaced='{ns_path}'")
         elem = parent.find(ns_path, self.NS)
         if elem is None:
-            logger.debug(f"HamQTH _find: namespace search failed, trying without namespace")
+            logger.debug("HamQTH _find: namespace search failed, trying without namespace")
             # Fallback to without namespace
             elem = parent.find(path)
         else:
-            logger.debug(f"HamQTH _find: found element with namespace")
+            logger.debug("HamQTH _find: found element with namespace")
         return elem
 
     def _findtext(self, parent: ET.Element, path: str, default: str = "") -> Optional[str]:

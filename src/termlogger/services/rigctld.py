@@ -219,7 +219,7 @@ class RigctldService:
         # Parse error code
         try:
             code = int(response.split()[1])
-        except (IndexError, ValueError) as e:
+        except (IndexError, ValueError):
             logger.error(f"Failed to parse RPRT code from response: {response}")
             raise RigctldError(f"Failed to parse response: {response}")
 
@@ -300,7 +300,7 @@ class RigctldService:
         # Parse error code
         try:
             code = int(response.split()[1])
-        except (IndexError, ValueError) as e:
+        except (IndexError, ValueError):
             logger.error(f"Failed to parse RPRT code from response: {response}")
             raise RigctldError(f"Failed to parse response: {response}")
 

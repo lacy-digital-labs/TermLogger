@@ -124,7 +124,7 @@ class ManualTuneModal(ModalScreen[dict]):
             frequency = float(freq_str)
             if frequency <= 0:
                 raise ValueError("Frequency must be greater than 0")
-        except ValueError as e:
+        except ValueError:
             # Show error message
             error_msg = self.query_one("#error-message", Static)
             error_msg.update(f"Invalid frequency: {freq_str}")
