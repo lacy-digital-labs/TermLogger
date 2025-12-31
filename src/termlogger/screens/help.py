@@ -19,15 +19,17 @@ HELP_TEXT = """
 | **Tab** / **Shift+Tab** | Navigate fields |
 | **Enter** | Log QSO |
 | **F1** | This help screen |
-| **F2** | Import ADIF |
-| **F3** | Export ADIF |
+| **F2** | New mode / End mode (toggle) |
+| **F3** | Clear form |
 | **F5** | Lookup callsign |
+| **F6** | Log manager (export/import/archive) |
+| **F7** | Browse log |
+| **F9** | Settings |
 | **F10** | Exit |
-| **Ctrl+N** | Start new operating mode |
-| **Ctrl+E** | End current mode |
-| **Ctrl+S** | Settings |
-| **Ctrl+L** | Log browser |
-| **Ctrl+Q** | Quit |
+| **Ctrl+E** | Export ADIF (current mode) |
+| **Ctrl+I** | Import ADIF |
+| **Ctrl+P** | Export POTA log |
+| **Ctrl+F** | Manual tune (frequency/mode) |
 
 ---
 
@@ -40,12 +42,13 @@ HELP_TEXT = """
 5. Press **Enter** to log
 
 The form clears automatically after logging.
+QSOs display most recent first.
 
 ---
 
 ## Operating Modes
 
-Press **Ctrl+N** to select a mode:
+Press **F2** to select a mode. Press **F2** again to end the current mode.
 
 - **General Logging** - Everyday QSO logging
 - **POTA Activation** - Activate a park (tracks 10-contact requirement)
@@ -55,17 +58,34 @@ Press **Ctrl+N** to select a mode:
 
 ---
 
+## Log Manager (F6)
+
+Manage virtual logs for different activations and events.
+
+**Features:**
+- **Active/Archived tabs** - Switch between current and archived logs
+- **New log** - Create a new log for an activation or event
+- **Select log** - Set the active log for QSO entry
+- **Export** - Export log as ADIF, POTA, or Cabrillo format
+- **Import** - Import ADIF file into a new log
+- **Archive** - Archive old logs to keep them organized
+
+---
+
 ## Spots Table
 
-The spots table shows real-time DX activity.
+The spots table shows real-time DX and POTA activity.
+Spots are sorted by frequency for easy band scanning.
 
 **Filtering:**
-- Click **Band** header to filter by band
-- Click **Mode** header to filter by mode
+- Click **Band** button to filter by band
+- Click **Mode** button to filter by mode
 - Active filter shown in bold
 
 **Using Spots:**
-- Click any spot to fill frequency/mode in QSO form
+- Click any spot to fill callsign/frequency in QSO form
+- For POTA spots: park info (name, location, grid) is displayed
+- Auto-QSY: radio changes frequency when clicking spot (if enabled)
 
 ---
 
@@ -73,7 +93,7 @@ The spots table shows real-time DX activity.
 
 Automatic lookup triggers when you tab out of the callsign field.
 
-Configure credentials in **Settings** (Ctrl+S):
+Configure credentials in **Settings** (F9):
 - **QRZ.com** - Requires XML subscription
 - **HamQTH** - Free registration
 
@@ -91,9 +111,10 @@ Connect TermLogger to your radio for automatic tracking and QSY control.
 - Band indicator shows current frequency/band
 - Frequency updates when tabbing to frequency field
 - Auto-QSY: click a spot to change radio frequency
+- Manual tune: press **Ctrl+F** to change frequency/mode
 
 **Setup:**
-1. Go to **Settings** (Ctrl+S) → **Rig** tab
+1. Go to **Settings** (F9) → **Rig** tab
 2. Select control type (rigctld or Flex Radio)
 3. Enter host/port settings
 4. Enable Auto-QSY if desired
@@ -111,6 +132,7 @@ rigctld -m 3073 -r /dev/ttyUSB0
 - RST defaults to 59 - only change when needed
 - Use spots table to quickly tune to active frequencies
 - Check the status bar for mode information
+- Use Log Manager (F6) to organize different activations
 
 ---
 

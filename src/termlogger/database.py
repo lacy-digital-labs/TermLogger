@@ -543,6 +543,37 @@ class Database:
             conn.commit()
             return cursor.rowcount > 0
 
+    def unarchive_log(self, log_id: int) -> bool:
+        """Unarchive a log."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE logs SET is_archived = 0 WHERE id = ?",
+                (log_id,),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_archived_logs(self, limit: int = 100) -> list[Log]:
+        """Get only archived logs."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT * FROM logs
+                WHERE is_archived = 1
+                ORDER BY created_at DESC
+                LIMIT ?
+            """,
+                (limit,),
+            )
+            logs = [self._row_to_log(row) for row in cursor.fetchall()]
+            # Get QSO counts for each log
+            for log in logs:
+                if log.id:
+                    log.qso_count = self.get_qso_count(log_id=log.id)
+            return logs
+
     def _row_to_log(self, row: sqlite3.Row) -> Log:
         """Convert a database row to a Log object."""
         return Log(

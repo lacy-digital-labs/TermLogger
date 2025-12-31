@@ -252,16 +252,13 @@ class MainScreen(Screen):
 
     BINDINGS = [
         ("f1", "show_help", "Help"),
-        ("f2", "export_adif", "Export"),
+        ("f2", "toggle_mode", "Mode"),
         ("f3", "clear_form", "Clear"),
-        ("f4", "show_settings", "Settings"),
         ("f5", "lookup_callsign", "Lookup"),
         ("f6", "manage_logs", "Logs"),
         ("f7", "browse_log", "Browse"),
-        ("f8", "export_cabrillo", "Cabrillo"),
-        ("f9", "end_mode", "End Mode"),
+        ("f9", "show_settings", "Settings"),
         ("f10", "quit", "Exit"),
-        ("ctrl+n", "new_contest", "New Contest"),
         ("ctrl+e", "export_adif", "Export ADIF"),
         ("ctrl+i", "import_adif", "Import ADIF"),
         ("ctrl+p", "export_pota", "Export POTA"),
@@ -1037,6 +1034,15 @@ class MainScreen(Screen):
             self.query_one(QSOEntryForm).set_pota_mode(False)
         # Switch back to DX cluster spots
         self._start_spot_refresh()
+
+    def action_toggle_mode(self) -> None:
+        """Toggle operating mode - start new mode if none active, end mode if active."""
+        if self._current_mode is None:
+            # No active mode - start new mode
+            self.action_new_contest()
+        else:
+            # Active mode - end it
+            self.action_end_mode()
 
     def action_export_cabrillo(self) -> None:
         """Export log in Cabrillo format."""

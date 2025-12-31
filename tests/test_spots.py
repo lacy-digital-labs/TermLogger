@@ -97,7 +97,7 @@ class TestPOTASpotService:
         # Simulate API response data
         spot_data = {
             "activator": "W1ABC",
-            "frequency": "14.250",
+            "frequency": "14250",
             "mode": "SSB",
             "reference": "K-1234",
             "parkName": "Test National Park",
