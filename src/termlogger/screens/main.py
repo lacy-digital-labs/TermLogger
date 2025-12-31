@@ -11,7 +11,7 @@ from textual.containers import Horizontal, Vertical
 from textual.events import Focus
 from textual.screen import Screen
 from textual.timer import Timer
-from textual.widgets import Footer, Input, Static
+from textual.widgets import Footer, Input, Select, Static
 from textual.worker import Worker, WorkerState
 
 from ..adif import export_adif_file, export_pota_adif, get_pota_filename, parse_adif_file
@@ -94,9 +94,20 @@ class BandIndicator(Static):
     }
     """
 
-    def set_band_info(self, freq: float, mode: str, band: str) -> None:
-        """Set the band indicator display."""
-        self.update(f"[bold cyan]{freq:.3f} MHz[/bold cyan] | [green]{mode}[/green] | [yellow]{band}[/yellow]")
+    def set_band_info(self, freq: float, mode: str, band: str, rig_error: bool = False) -> None:
+        """Set the band indicator display.
+
+        Args:
+            freq: Frequency in MHz
+            mode: Operating mode
+            band: Band designation
+            rig_error: If True, show rig control error indicator
+        """
+        base = f"[bold cyan]{freq:.3f} MHz[/bold cyan] | [green]{mode}[/green] | [yellow]{band}[/yellow]"
+        if rig_error:
+            self.update(f"{base} | [red bold]⚠ RIG ERROR[/red bold]")
+        else:
+            self.update(base)
 
 
 class UTCClock(Static):
@@ -302,6 +313,7 @@ class MainScreen(Screen):
         self._rigctld_service: Optional[RigctldService] = None
         self._flexradio_service: Optional[FlexRadioService] = None
         self._rig_poll_timer: Optional[Timer] = None
+        self._rig_has_error = False  # Track if rig control is failing
 
     def compose(self) -> ComposeResult:
         """Create child widgets."""
@@ -342,8 +354,8 @@ class MainScreen(Screen):
         # Initialize callsign info
         self.query_one(CallsignInfo).clear()
 
-        # Set initial band indicator
-        self.query_one(BandIndicator).set_band_info(14.250, "SSB", "20m")
+        # Set initial band indicator from form
+        self._update_band_indicator_from_form()
 
         # Initialize spot services
         self._pota_spot_service = POTASpotService()
@@ -416,10 +428,28 @@ class MainScreen(Screen):
 
     async def _do_rig_poll(self) -> None:
         """Async worker to poll rig state."""
+        state = None
+
         if self._rigctld_service:
-            await self._rigctld_service.poll()
+            state = await self._rigctld_service.poll()
         elif self._flexradio_service:
-            await self._flexradio_service.poll()
+            state = await self._flexradio_service.poll()
+
+        # Handle rig errors - fall back to form display
+        if state is None:
+            # Rig poll failed - show form data with error indicator
+            if not self._rig_has_error:
+                # First error - log it
+                logger.warning("Rig control poll failed - falling back to form display")
+                self._rig_has_error = True
+            # Update display from form with error indicator (thread-safe)
+            self.app.call_later(self._update_band_indicator_from_form, True)
+        else:
+            # Rig poll succeeded - clear error flag if it was set
+            if self._rig_has_error:
+                logger.info("Rig control recovered")
+                self._rig_has_error = False
+            # Callbacks will handle display update with rig data
 
     def _on_rig_state_change(self, state: RigState) -> None:
         """Handle rigctld state change callback - update UI."""
@@ -456,6 +486,35 @@ class MainScreen(Screen):
             band_indicator.set_band_info(state.frequency_mhz, mapped_mode, band_str)
         except Exception as e:
             logger.warning(f"Failed to update Flex display: {e}")
+
+    def _update_band_indicator_from_form(self, show_error: bool = False) -> None:
+        """Update band indicator from QSO form values (fallback when rig fails).
+
+        Args:
+            show_error: If True, show rig control error indicator
+        """
+        try:
+            # Read frequency from form
+            freq_input = self.query_one("#frequency", Input)
+            freq_str = freq_input.value.strip()
+            freq = float(freq_str) if freq_str else 14.250
+
+            # Read mode from form
+            form = self.query_one(QSOEntryForm)
+            mode_select = form.query_one("#mode", Select)
+            mode = mode_select.value if mode_select.value else "SSB"
+
+            # Calculate band from frequency
+            from ..models import frequency_to_band
+            band_enum = frequency_to_band(freq)
+            band_str = band_enum.value if band_enum else "?"
+
+            # Update display with error flag if needed
+            band_indicator = self.query_one(BandIndicator)
+            band_indicator.set_band_info(freq, mode, band_str, rig_error=show_error)
+            logger.debug(f"Updated band indicator from form: {freq:.3f} MHz {mode} ({band_str}){' [ERROR]' if show_error else ''}")
+        except Exception as e:
+            logger.warning(f"Failed to update band indicator from form: {e}")
 
     def on_focus(self, event: Focus) -> None:
         """Handle focus events - update frequency from rig when frequency field focused."""
