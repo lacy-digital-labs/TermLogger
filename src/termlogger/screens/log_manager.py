@@ -389,7 +389,7 @@ class LogManagerScreen(ModalScreen[Optional[int]]):
         from .file_picker import ExportCompleteScreen, FilePickerScreen
 
         # Get QSOs for this log
-        qsos = self.db.get_qsos(log_id=log.id)
+        qsos = self.db.get_all_qsos(log_id=log.id, limit=10000)
         if not qsos:
             self.notify("No QSOs to export", severity="warning")
             return
