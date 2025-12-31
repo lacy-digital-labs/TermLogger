@@ -2,11 +2,9 @@
 
 from typing import Optional
 
-from textual import on
 from textual.app import ComposeResult
-from textual.containers import Horizontal
 from textual.message import Message
-from textual.widgets import Button, DataTable, Static
+from textual.widgets import DataTable, Static
 
 from ..models import Spot, format_frequency
 
@@ -41,28 +39,12 @@ class SpotsTable(Static):
         text-style: bold;
     }
 
-    SpotsTable .filter-row {
+    SpotsTable .filter-status {
         height: 1;
-        background: $surface;
-        padding: 0 1;
-    }
-
-    SpotsTable .filter-btn {
-        min-width: 8;
-        height: 1;
-        border: none;
-        background: $surface-lighten-1;
-        margin-right: 1;
-    }
-
-    SpotsTable .filter-btn:hover {
-        background: $surface-lighten-2;
-    }
-
-    SpotsTable .filter-btn.active {
-        background: $primary;
+        background: $panel;
         color: $text;
-        text-style: bold;
+        padding: 0 1;
+        text-align: center;
     }
     """
 
@@ -100,10 +82,8 @@ class SpotsTable(Static):
     def compose(self) -> ComposeResult:
         """Create child widgets."""
         yield Static(f"[bold]{self._title}[/bold]", classes="spots-header", id="spots-title")
-        with Horizontal(classes="filter-row"):
-            yield Button("Band: All", id="band-filter", classes="filter-btn")
-            yield Button("Mode: All", id="mode-filter", classes="filter-btn")
         yield DataTable(id="spots-data-table", cursor_type="row")
+        yield Static("", id="filter-status", classes="filter-status")
 
     def on_mount(self) -> None:
         """Initialize the table."""
@@ -122,23 +102,12 @@ class SpotsTable(Static):
         elif column_key == "mode":
             self._cycle_mode_filter()
 
-    @on(Button.Pressed, "#band-filter")
-    def _on_band_filter_pressed(self) -> None:
-        """Handle band filter button press."""
-        self._cycle_band_filter()
-
-    @on(Button.Pressed, "#mode-filter")
-    def _on_mode_filter_pressed(self) -> None:
-        """Handle mode filter button press."""
-        self._cycle_mode_filter()
-
     def _cycle_band_filter(self) -> None:
         """Cycle to next band filter."""
         current_idx = FILTER_BANDS.index(self._band_filter) if self._band_filter in FILTER_BANDS else 0
         next_idx = (current_idx + 1) % len(FILTER_BANDS)
         self._band_filter = FILTER_BANDS[next_idx]
         self._apply_filters()
-        self._update_filter_buttons()
 
     def _cycle_mode_filter(self) -> None:
         """Cycle to next mode filter."""
@@ -146,31 +115,24 @@ class SpotsTable(Static):
         next_idx = (current_idx + 1) % len(FILTER_MODES)
         self._mode_filter = FILTER_MODES[next_idx]
         self._apply_filters()
-        self._update_filter_buttons()
 
-    def _update_filter_buttons(self) -> None:
-        """Update filter button labels and styles."""
+    def _update_status_bar(self) -> None:
+        """Update the status bar with filter info and keyboard hints."""
         try:
-            band_btn = self.query_one("#band-filter", Button)
-            mode_btn = self.query_one("#mode-filter", Button)
+            status = self.query_one("#filter-status", Static)
 
-            band_btn.label = f"Band: {self._band_filter}"
-            mode_btn.label = f"Mode: {self._mode_filter}"
-
-            # Update active class
-            if self._band_filter != "All":
-                band_btn.add_class("active")
+            if self._band_filter == "All" and self._mode_filter == "All":
+                status.update("[dim]B: Band | M: Mode | C: Clear filters[/dim]")
             else:
-                band_btn.remove_class("active")
-
-            if self._mode_filter != "All":
-                mode_btn.add_class("active")
-            else:
-                mode_btn.remove_class("active")
+                filters = []
+                if self._band_filter != "All":
+                    filters.append(f"Band={self._band_filter}")
+                if self._mode_filter != "All":
+                    filters.append(f"Mode={self._mode_filter}")
+                filter_str = " ".join(filters)
+                status.update(f"[yellow]{filter_str}[/yellow] [dim]| B: Next Band | M: Next Mode | C: Clear[/dim]")
         except Exception:
             pass
-
-        self._update_header()
 
     def _update_header(self) -> None:
         """Update the header with title and filter info."""
@@ -214,12 +176,12 @@ class SpotsTable(Static):
 
         self._refresh_table()
         self._update_header()
+        self._update_status_bar()
 
     def load_spots(self, spots: list[Spot]) -> None:
         """Load spots into the table."""
         self._spots = spots
         self._apply_filters()
-        self._update_filter_buttons()
 
     def add_spot(self, spot: Spot) -> None:
         """Add a new spot to the top of the table."""
@@ -235,6 +197,7 @@ class SpotsTable(Static):
         self._filtered_spots = []
         self._refresh_table()
         self._update_header()
+        self._update_status_bar()
 
     def _refresh_table(self) -> None:
         """Refresh the table display."""
@@ -302,4 +265,3 @@ class SpotsTable(Static):
         self._band_filter = "All"
         self._mode_filter = "All"
         self._apply_filters()
-        self._update_filter_buttons()

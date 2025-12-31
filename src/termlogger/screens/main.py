@@ -275,6 +275,9 @@ class MainScreen(Screen):
         ("ctrl+i", "import_adif", "Import ADIF"),
         ("ctrl+p", "export_pota", "Export POTA"),
         ("ctrl+f", "manual_tune", "Tune"),
+        ("b", "cycle_band_filter", "Cycle Band"),
+        ("m", "cycle_mode_filter", "Cycle Mode"),
+        ("c", "clear_spot_filters", "Clear Filters"),
     ]
 
     CSS = """
@@ -1420,6 +1423,30 @@ class MainScreen(Screen):
                 severity="warning",
                 timeout=3,
             )
+
+    def action_cycle_band_filter(self) -> None:
+        """Cycle through band filters for spots table."""
+        try:
+            spots_table = self.query_one("#spots-table", SpotsTable)
+            spots_table._cycle_band_filter()
+        except Exception:
+            pass
+
+    def action_cycle_mode_filter(self) -> None:
+        """Cycle through mode filters for spots table."""
+        try:
+            spots_table = self.query_one("#spots-table", SpotsTable)
+            spots_table._cycle_mode_filter()
+        except Exception:
+            pass
+
+    def action_clear_spot_filters(self) -> None:
+        """Clear all spot filters for spots table."""
+        try:
+            spots_table = self.query_one("#spots-table", SpotsTable)
+            spots_table.reset_filters()
+        except Exception:
+            pass
 
     def action_quit(self) -> None:
         """Quit the application."""
