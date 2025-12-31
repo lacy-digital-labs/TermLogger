@@ -259,14 +259,19 @@ class RigctldService:
                 mode_str = mode_line.decode().strip()
 
                 # Read second line (passband) - rigctld sends this on a separate line
+                # CRITICAL: Must read this line with full timeout to prevent buffer desync
+                # If we timeout here, the connection is broken and should be reset
+                passband_line = await asyncio.wait_for(
+                    self._reader.readline(),
+                    timeout=self.TIMEOUT,
+                )
+                passband_str = passband_line.decode().strip()
+
+                # Parse passband value
                 try:
-                    passband_line = await asyncio.wait_for(
-                        self._reader.readline(),
-                        timeout=0.5,
-                    )
-                    passband_str = passband_line.decode().strip()
                     passband = int(passband_str)
-                except (asyncio.TimeoutError, ValueError):
+                except ValueError:
+                    logger.warning(f"Invalid passband value '{passband_str}', using 0")
                     passband = 0
 
                 return mode_str, passband
