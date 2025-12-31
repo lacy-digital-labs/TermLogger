@@ -299,12 +299,12 @@ class RigctldService:
                 logger.error(f"Connection lost while executing '{self.CMD_GET_MODE}': {e}")
                 raise RigctldConnectionError(f"Connection lost: {e}")
 
-    async def set_mode(self, mode: str, passband: int = 0) -> None:
+    async def set_mode(self, mode: str, passband: int = -1) -> None:
         """Set operating mode.
 
         Args:
             mode: Mode name (USB, LSB, CW, AM, FM, etc.)
-            passband: Passband width in Hz (0 for default)
+            passband: Passband width in Hz (-1 for no change, 0 for default)
         """
         response = await self._send_command(f"{self.CMD_SET_MODE} {mode} {passband}")
 
