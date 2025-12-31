@@ -12,7 +12,7 @@ Calendar versioning: `YY.MM.nn` (e.g., 25.12.01 = first release December 2025)
 
 ## Current Version
 
-25.12.04
+25.12.05
 
 ## Feature Roadmap
 
