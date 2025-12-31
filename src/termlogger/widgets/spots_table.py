@@ -8,7 +8,7 @@ from textual.containers import Horizontal
 from textual.message import Message
 from textual.widgets import Button, DataTable, Static
 
-from ..models import Spot
+from ..models import Spot, format_frequency
 
 
 # Common modes to filter by (in cycle order)
@@ -243,7 +243,7 @@ class SpotsTable(Static):
 
         for i, spot in enumerate(self._filtered_spots):
             # Format frequency
-            freq_str = f"{spot.frequency:.3f}"
+            freq_str = format_frequency(spot.frequency)
 
             # Get band
             band_str = spot.band.value if spot.band else "-"

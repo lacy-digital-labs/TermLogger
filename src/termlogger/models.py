@@ -67,6 +67,24 @@ def frequency_to_band(freq_mhz: float) -> Optional[Band]:
     return None
 
 
+def format_frequency(freq_mhz: float) -> str:
+    """Format frequency with smart precision.
+
+    Shows 3 decimals if last 2 are zero, otherwise 5 decimals.
+    Examples: 14.074, 24.920, 24.92050
+
+    Args:
+        freq_mhz: Frequency in MHz
+
+    Returns:
+        Formatted frequency string
+    """
+    formatted = f"{freq_mhz:.5f}"
+    if formatted.endswith("00"):
+        return f"{freq_mhz:.3f}"
+    return formatted
+
+
 class QSO(BaseModel):
     """A single QSO (contact) record."""
 

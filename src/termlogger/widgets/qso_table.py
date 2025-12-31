@@ -6,7 +6,7 @@ from textual.app import ComposeResult
 from textual.message import Message
 from textual.widgets import DataTable, Static
 
-from ..models import QSO
+from ..models import QSO, format_frequency
 
 
 class QSOTable(Static):
@@ -84,7 +84,7 @@ class QSOTable(Static):
                 qso.time_str,
                 qso.date_str,
                 qso.callsign,
-                f"{qso.frequency:.3f}",
+                format_frequency(qso.frequency),
                 qso.mode.value,
                 qso.rst_sent,
                 qso.rst_received,

@@ -194,8 +194,16 @@ class RigctldService:
         """
         response = await self._send_command(self.CMD_GET_FREQ)
         try:
+            # Check for stream desync - if we got a command response instead of frequency
+            if response.startswith("RPRT"):
+                logger.error(f"Stream desync detected in get_frequency: got '{response}' instead of frequency")
+                self._connected = False
+                raise RigctldConnectionError("Stream desynchronized - connection reset required")
             return float(response)
         except ValueError:
+            # Non-numeric response suggests stream desync
+            logger.error(f"Invalid frequency response: {response} - possible stream desync")
+            self._connected = False
             raise RigctldError(f"Invalid frequency response: {response}")
 
     async def set_frequency(self, freq_hz: float) -> None:
@@ -271,6 +279,13 @@ class RigctldService:
                 try:
                     passband = int(passband_str)
                 except ValueError:
+                    # Check if this looks like a mode string (stream desync)
+                    # Valid passband is numeric, if we got letters it's likely a mode
+                    if passband_str.isalpha() and len(passband_str) >= 2:
+                        logger.error(f"Stream desync detected in get_mode: got '{passband_str}' instead of passband")
+                        self._connected = False
+                        raise RigctldConnectionError("Stream desynchronized - connection reset required")
+                    # Otherwise just warn and use 0
                     logger.warning(f"Invalid passband value '{passband_str}', using 0")
                     passband = 0
 

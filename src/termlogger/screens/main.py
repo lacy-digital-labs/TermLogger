@@ -18,7 +18,7 @@ from ..adif import export_adif_file, export_pota_adif, get_pota_filename, parse_
 from ..callsign import LookupError
 from ..config import DXClusterSource, RigControlType
 from ..database import Database
-from ..models import CallsignLookupResult, Spot
+from ..models import CallsignLookupResult, Spot, format_frequency
 from ..modes import (
     ContestMode,
     FieldDayMode,
@@ -103,7 +103,7 @@ class BandIndicator(Static):
             band: Band designation
             rig_error: If True, show rig control error indicator
         """
-        base = f"[bold cyan]{freq:.3f} MHz[/bold cyan] | [green]{mode}[/green] | [yellow]{band}[/yellow]"
+        base = f"[bold cyan]{format_frequency(freq)} MHz[/bold cyan] | [green]{mode}[/green] | [yellow]{band}[/yellow]"
         if rig_error:
             self.update(f"{base} | [red bold]⚠ RIG ERROR[/red bold]")
         else:
@@ -414,7 +414,7 @@ class MainScreen(Screen):
             interval = self.app.config.rig_poll_interval
             self._rig_poll_timer = self.set_interval(interval, self._poll_rig)
             # Do initial poll
-            self.run_worker(self._do_rig_poll(), exclusive=False, name="rig_poll")
+            self.run_worker(self._do_rig_poll(), exclusive=True, name="rig_poll", group="rig")
 
     def _stop_rig_polling(self) -> None:
         """Stop rig polling."""
@@ -424,7 +424,7 @@ class MainScreen(Screen):
 
     def _poll_rig(self) -> None:
         """Trigger a rig poll."""
-        self.run_worker(self._do_rig_poll(), exclusive=False, name="rig_poll")
+        self.run_worker(self._do_rig_poll(), exclusive=True, name="rig_poll", group="rig")
 
     async def _do_rig_poll(self) -> None:
         """Async worker to poll rig state."""
@@ -685,8 +685,9 @@ class MainScreen(Screen):
             ):
                 self.run_worker(
                     self._qsy_to_spot(spot),
-                    exclusive=False,
+                    exclusive=True,
                     name="qsy",
+                    group="rig",
                 )
 
         # For POTA spots, look up park info and display, and fill in park ref
@@ -1283,14 +1284,16 @@ class MainScreen(Screen):
                     self.run_worker(
                         self._tune_rigctld(frequency, mode),
                         name="tune_rigctld",
-                        exclusive=False,
+                        exclusive=True,
+                        group="rig",
                     )
             elif rig_type == RigControlType.FLEXRADIO and self._flexradio_service:
                 if self._flexradio_service.is_connected:
                     self.run_worker(
                         self._tune_flexradio(frequency, mode),
                         name="tune_flexradio",
-                        exclusive=False,
+                        exclusive=True,
+                        group="rig",
                     )
 
         # Show the modal

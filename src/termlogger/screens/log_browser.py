@@ -19,7 +19,7 @@ from textual.widgets import (
 )
 
 from ..database import Database
-from ..models import Mode, QSO
+from ..models import Mode, QSO, format_frequency
 
 
 class QSOEditModal(ModalScreen[Optional[QSO]]):
@@ -361,7 +361,7 @@ class LogBrowserScreen(Screen):
                 qso.date_str,
                 qso.time_str,
                 qso.callsign,
-                f"{qso.frequency:.3f}",
+                format_frequency(qso.frequency),
                 qso.mode.value,
                 qso.rst_sent,
                 qso.rst_received,
