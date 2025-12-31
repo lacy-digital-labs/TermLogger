@@ -55,11 +55,22 @@ Before creating a release:
 
 ### 1. Update Version
 
-Edit `pyproject.toml`:
+Update version in these files:
+
+- `pyproject.toml` - Package version
+- `src/termlogger/__init__.py` - Runtime version
+- `src/termlogger/screens/help.py` - Splash screen version
+- `CLAUDE.md` - Development notes
 
 ```toml
+# pyproject.toml
 [project]
 version = "YY.MM.nn"
+```
+
+```python
+# src/termlogger/__init__.py
+__version__ = "YY.MM.nn"
 ```
 
 ### 2. Update Changelog
@@ -99,15 +110,19 @@ git push origin main
 git push origin vYY.MM.nn
 ```
 
-### 6. Create GitHub Release
+### 6. GitHub Release (Automated)
 
-1. Go to the repository's Releases page
-2. Click "Draft a new release"
-3. Select the tag `vYY.MM.nn`
-4. Title: `TermLogger YY.MM.nn`
-5. Copy release notes from CHANGELOG.md
-6. Attach any binary distributions
-7. Publish release
+When you push a version tag, GitHub Actions automatically:
+
+1. Builds standalone executables for all platforms:
+   - Linux x86_64 and ARM64
+   - macOS ARM64 (Apple Silicon) and x86_64 (Intel)
+   - Windows x86_64
+2. Builds Python wheel and source distribution
+3. Creates a GitHub Release with all artifacts attached
+4. Publishes to PyPI via trusted publishing
+
+No manual release creation is needed - just push the tag!
 
 ## Building Distributions
 
@@ -197,3 +212,39 @@ Unlike semantic versioning (MAJOR.MINOR.PATCH), calendar versioning:
 | Predictability | Based on changes | Based on calendar |
 
 Calendar versioning works well for applications with regular release cycles and where users benefit from knowing how recent their version is.
+
+## PyPI Trusted Publishing Setup
+
+TermLogger uses PyPI trusted publishing (no API tokens needed). This is already configured, but if you need to set it up for a fork:
+
+### PyPI Configuration
+
+1. Go to https://pypi.org/manage/account/publishing/
+2. Add a pending publisher with:
+   - PyPI Project Name: `termlogger`
+   - Owner: `lacy-digital-labs`
+   - Repository: `TermLogger`
+   - Workflow name: `release.yml`
+   - Environment name: `pypi`
+
+### GitHub Configuration
+
+1. Create an environment named `pypi` at:
+   `https://github.com/lacy-digital-labs/TermLogger/settings/environments`
+
+Once configured, pushing a version tag automatically publishes to PyPI.
+
+## Installation Methods
+
+After release, users can install via:
+
+```bash
+# Recommended: isolated environment
+pipx install termlogger
+
+# Alternative: pip
+pip install termlogger
+
+# From GitHub releases (standalone executables)
+# Download from https://github.com/lacy-digital-labs/TermLogger/releases
+```

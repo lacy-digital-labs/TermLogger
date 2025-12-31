@@ -12,7 +12,7 @@ Calendar versioning: `YY.MM.nn` (e.g., 25.12.01 = first release December 2025)
 
 ## Current Version
 
-25.12.04
+25.12.06
 
 ## Feature Roadmap
 
@@ -70,17 +70,17 @@ Calendar versioning: `YY.MM.nn` (e.g., 25.12.01 = first release December 2025)
 | Key | Action |
 |-----|--------|
 | F1 | Help |
-| F2 | Export ADIF |
+| F2 | New mode / End mode (toggle) |
 | F3 | Clear form |
-| F4 | Settings |
 | F5 | Callsign lookup |
-| F6 | Log manager |
+| F6 | Log manager (export/import/archive) |
 | F7 | Browse log |
-| F8 | Export Cabrillo |
-| F9 | End mode |
+| F9 | Settings |
 | F10 | Exit |
-| Ctrl+N | New contest/mode |
-| Ctrl+P | Export POTA log |
+| Ctrl+E | Export ADIF (current mode) |
+| Ctrl+I | Import ADIF |
+| Ctrl+P | Export POTA log (current mode) |
+| Ctrl+F | Manual tune (frequency/mode) |
 
 ## Database Schema
 

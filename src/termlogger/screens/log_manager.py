@@ -1,6 +1,7 @@
 """Log manager screen for creating and managing virtual logs."""
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from textual import on
@@ -172,11 +173,20 @@ class LogManagerScreen(ModalScreen[Optional[int]]):
         height: 2;
     }
 
-    LogManagerScreen .subtitle {
-        text-align: center;
-        color: $text-muted;
-        height: 1;
+    LogManagerScreen .tab-row {
+        height: 3;
+        align: center middle;
         margin-bottom: 1;
+    }
+
+    LogManagerScreen .tab-row Button {
+        margin: 0 1;
+        min-width: 16;
+    }
+
+    LogManagerScreen .tab-active {
+        background: $primary;
+        color: $text;
     }
 
     LogManagerScreen DataTable {
@@ -204,7 +214,9 @@ class LogManagerScreen(ModalScreen[Optional[int]]):
         ("escape", "close", "Close"),
         ("n", "new_log", "New Log"),
         ("enter", "select_log", "Select"),
-        ("a", "archive_log", "Archive"),
+        ("a", "toggle_archive", "Archive/Unarchive"),
+        ("e", "export_log", "Export"),
+        ("i", "import_log", "Import"),
     ]
 
     def __init__(self, db: Database) -> None:
@@ -212,22 +224,23 @@ class LogManagerScreen(ModalScreen[Optional[int]]):
         self.db = db
         self._logs: list[Log] = []
         self._active_log_id: Optional[int] = None
+        self._showing_archived = False
 
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static("Log Manager", classes="title")
-            yield Static(
-                "Select a log to make it active, or create a new one",
-                classes="subtitle",
-            )
+            with Horizontal(classes="tab-row"):
+                yield Button("Active Logs", id="tab-active", variant="primary", classes="tab-active")
+                yield Button("Archived Logs", id="tab-archived", variant="default")
             yield Static("", id="active-info", classes="info-row")
             yield DataTable(id="logs-table", cursor_type="row")
             with Horizontal(classes="button-row"):
-                yield Button("New Log (N)", id="new-log", variant="primary")
-                yield Button("Select (Enter)", id="select-log", variant="success")
-                yield Button("View All QSOs", id="view-all")
+                yield Button("New (N)", id="new-log", variant="primary")
+                yield Button("Select", id="select-log", variant="success")
+                yield Button("Export (E)", id="export-log")
+                yield Button("Import (I)", id="import-log")
                 yield Button("Archive (A)", id="archive-log", variant="warning")
-                yield Button("Close (Esc)", id="close")
+                yield Button("Close", id="close")
 
     def on_mount(self) -> None:
         """Initialize the screen."""
@@ -244,18 +257,31 @@ class LogManagerScreen(ModalScreen[Optional[int]]):
 
     def _refresh_logs(self) -> None:
         """Refresh the logs table."""
-        self._logs = self.db.get_all_logs(include_archived=False)
+        if self._showing_archived:
+            self._logs = self.db.get_archived_logs()
+        else:
+            self._logs = self.db.get_all_logs(include_archived=False)
+
         active_log = self.db.get_active_log()
         self._active_log_id = active_log.id if active_log else None
 
         # Update info row
         info = self.query_one("#active-info", Static)
-        if active_log:
+        if self._showing_archived:
+            info.update(f"[dim]Showing {len(self._logs)} archived log(s)[/dim]")
+        elif active_log:
             info.update(
                 f"[bold]Active Log:[/bold] {active_log.display_name} ({active_log.qso_count} QSOs)"
             )
         else:
             info.update("[dim]No active log - QSOs will be logged without a log association[/dim]")
+
+        # Update archive button text
+        archive_btn = self.query_one("#archive-log", Button)
+        if self._showing_archived:
+            archive_btn.label = "Unarchive (A)"
+        else:
+            archive_btn.label = "Archive (A)"
 
         # Update table
         table = self.query_one("#logs-table", DataTable)
@@ -273,6 +299,22 @@ class LogManagerScreen(ModalScreen[Optional[int]]):
                 is_active,
                 key=str(log.id),
             )
+
+    @on(Button.Pressed, "#tab-active")
+    def _on_tab_active(self) -> None:
+        """Switch to active logs view."""
+        self._showing_archived = False
+        self.query_one("#tab-active", Button).add_class("tab-active")
+        self.query_one("#tab-archived", Button).remove_class("tab-active")
+        self._refresh_logs()
+
+    @on(Button.Pressed, "#tab-archived")
+    def _on_tab_archived(self) -> None:
+        """Switch to archived logs view."""
+        self._showing_archived = True
+        self.query_one("#tab-archived", Button).add_class("tab-active")
+        self.query_one("#tab-active", Button).remove_class("tab-active")
+        self._refresh_logs()
 
     @on(Button.Pressed, "#new-log")
     def action_new_log(self) -> None:
@@ -297,6 +339,9 @@ class LogManagerScreen(ModalScreen[Optional[int]]):
     @on(DataTable.RowSelected)
     def action_select_log(self, event=None) -> None:
         """Select the highlighted log as active."""
+        if self._showing_archived:
+            self.notify("Unarchive the log first to select it", severity="warning")
+            return
         table = self.query_one("#logs-table", DataTable)
         if table.cursor_row is not None and table.cursor_row < len(self._logs):
             log = self._logs[table.cursor_row]
@@ -304,22 +349,165 @@ class LogManagerScreen(ModalScreen[Optional[int]]):
             self._refresh_logs()
             self.notify(f"Activated log: {log.name}")
 
-    @on(Button.Pressed, "#view-all")
-    def _on_view_all(self) -> None:
-        """Clear active log to view all QSOs."""
-        self.db.set_active_log(None)
-        self._refresh_logs()
-        self.notify("Cleared active log - viewing all QSOs")
-
     @on(Button.Pressed, "#archive-log")
-    def action_archive_log(self) -> None:
-        """Archive the selected log."""
+    def action_toggle_archive(self) -> None:
+        """Archive or unarchive the selected log."""
         table = self.query_one("#logs-table", DataTable)
         if table.cursor_row is not None and table.cursor_row < len(self._logs):
             log = self._logs[table.cursor_row]
-            self.db.archive_log(log.id)
-            self._refresh_logs()
-            self.notify(f"Archived log: {log.name}")
+            if self._showing_archived:
+                self.db.unarchive_log(log.id)
+                self._refresh_logs()
+                self.notify(f"Unarchived log: {log.name}")
+            else:
+                self.db.archive_log(log.id)
+                self._refresh_logs()
+                self.notify(f"Archived log: {log.name}")
+
+    @on(Button.Pressed, "#export-log")
+    def action_export_log(self) -> None:
+        """Export the selected log."""
+        table = self.query_one("#logs-table", DataTable)
+        if table.cursor_row is None or table.cursor_row >= len(self._logs):
+            self.notify("Select a log to export", severity="warning")
+            return
+
+        log = self._logs[table.cursor_row]
+
+        from .mode_setup import ExportSelectScreen
+
+        def handle_export_select(export_type: Optional[str]) -> None:
+            if export_type is None:
+                return
+            self._do_export(log, export_type)
+
+        self.app.push_screen(ExportSelectScreen(), handle_export_select)
+
+    def _do_export(self, log: Log, export_type: str) -> None:
+        """Perform the export for the given log."""
+        from ..adif import export_adif_file, export_pota_adif, get_pota_filename
+        from .file_picker import ExportCompleteScreen, FilePickerScreen
+
+        # Get QSOs for this log
+        qsos = self.db.get_all_qsos(log_id=log.id, limit=10000)
+        if not qsos:
+            self.notify("No QSOs to export", severity="warning")
+            return
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+
+        if export_type == "adif":
+            default_filename = f"{log.name.replace(' ', '_')}_{timestamp}.adi"
+
+            def handle_adif_export(path: Optional[Path]) -> None:
+                if path is None:
+                    return
+                try:
+                    export_adif_file(qsos, path)
+                    self.app.push_screen(
+                        ExportCompleteScreen(
+                            f"Exported ADIF log to:\n{path}\n\nQSOs: {len(qsos)}"
+                        )
+                    )
+                except Exception as e:
+                    self.notify(f"Export failed: {e}", severity="error")
+
+            self.app.push_screen(
+                FilePickerScreen(
+                    title="Export ADIF",
+                    start_path=Path.home(),
+                    extensions=[".adi", ".adif"],
+                    save_mode=True,
+                    default_filename=default_filename,
+                ),
+                handle_adif_export,
+            )
+
+        elif export_type == "pota":
+            if not log.pota_ref:
+                self.notify("Log has no POTA reference", severity="warning")
+                return
+            default_filename = get_pota_filename(
+                log.my_callsign or self.app.config.my_callsign,
+                log.pota_ref,
+            )
+
+            def handle_pota_export(path: Optional[Path]) -> None:
+                if path is None:
+                    return
+                try:
+                    export_pota_adif(
+                        qsos,
+                        path,
+                        my_park=log.pota_ref,
+                        my_state=log.location or "",
+                    )
+                    self.app.push_screen(
+                        ExportCompleteScreen(
+                            f"Exported POTA log to:\n{path}\n\nQSOs: {len(qsos)}"
+                        )
+                    )
+                except Exception as e:
+                    self.notify(f"Export failed: {e}", severity="error")
+
+            self.app.push_screen(
+                FilePickerScreen(
+                    title="Export POTA ADIF",
+                    start_path=Path.home(),
+                    extensions=[".adi", ".adif"],
+                    save_mode=True,
+                    default_filename=default_filename,
+                ),
+                handle_pota_export,
+            )
+
+        elif export_type == "cabrillo":
+            self.notify("Cabrillo export requires an active contest mode", severity="warning")
+
+    @on(Button.Pressed, "#import-log")
+    def action_import_log(self) -> None:
+        """Import a log from ADIF file."""
+        from ..adif import parse_adif_file
+        from .file_picker import FilePickerScreen
+
+        def handle_import(path: Optional[Path]) -> None:
+            if path is None:
+                return
+            try:
+                qsos = parse_adif_file(path)
+                if not qsos:
+                    self.notify("No QSOs found in file", severity="warning")
+                    return
+
+                # Create a new log for the imported QSOs
+                log = Log(
+                    name=f"Import: {path.stem}",
+                    description=f"Imported from {path.name}",
+                    log_type=LogType.GENERAL,
+                    start_time=datetime.now(timezone.utc),
+                )
+                log_id = self.db.add_log(log)
+
+                # Add QSOs to the log
+                for qso in qsos:
+                    qso.log_id = log_id
+                    self.db.add_qso(qso)
+
+                self.db.set_active_log(log_id)
+                self._refresh_logs()
+                self.notify(f"Imported {len(qsos)} QSOs into new log: {log.name}")
+            except Exception as e:
+                self.notify(f"Import failed: {e}", severity="error")
+
+        self.app.push_screen(
+            FilePickerScreen(
+                title="Import ADIF",
+                start_path=Path.home(),
+                extensions=[".adi", ".adif"],
+                save_mode=False,
+            ),
+            handle_import,
+        )
 
     @on(Button.Pressed, "#close")
     def action_close(self) -> None:

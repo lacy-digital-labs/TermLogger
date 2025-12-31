@@ -209,6 +209,9 @@ class SpotsTable(Static):
 
             self._filtered_spots.append(spot)
 
+        # Sort by frequency (ascending)
+        self._filtered_spots.sort(key=lambda s: s.frequency)
+
         self._refresh_table()
         self._update_header()
 

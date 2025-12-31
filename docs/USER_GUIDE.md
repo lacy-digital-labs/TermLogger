@@ -67,7 +67,7 @@ Press **Ctrl+S** to open Settings and configure:
 | 14:28 W2XYZ   14.255 SSB  59    | 14:29 JA1XYZ 21.3  15m  CW     |
 | ...                             | ...                             |
 +------------------------------------------------------------------+
-| Mode: General Logging | Ctrl+N for new mode                      |
+| Mode: General Logging | F2 for new mode                          |
 +------------------------------------------------------------------+
 ```
 
@@ -105,7 +105,7 @@ TermLogger automatically checks for duplicate contacts:
 
 ## Operating Modes
 
-Press **Ctrl+N** to select an operating mode.
+Press **F2** to select an operating mode. Press **F2** again to end the current mode.
 
 ### General Logging
 
@@ -143,7 +143,8 @@ POTA Hunter | QSOs: 12 | Parks: 5
 
 - Tracks total QSOs and unique parks worked
 - No activation requirement tracking
-- Enter the activator's park reference in the exchange field
+- POTA mode reveals "Their Park" field in QSO entry form for logging park references
+- Clicking a POTA spot auto-fills the park reference
 
 ### Contest Mode
 
@@ -221,12 +222,18 @@ Click column headers to filter:
 
 Active filters are shown in bold in the column header.
 
+### Spot Display
+
+- Spots are sorted by frequency (ascending) for easy band scanning
+- Most recent QSOs appear at the top of the log
+
 ### Selecting a Spot
 
 Click on any spot row to:
-- Auto-fill the frequency in the QSO entry form
+- Auto-fill the callsign and frequency in the QSO entry form
 - Auto-fill the mode if detected
-- The callsign is NOT auto-filled (to prevent accidental overwrites)
+- Auto-QSY your radio (if rig control enabled)
+- For POTA spots: Display park info (name, location, grid) and auto-fill their park reference
 
 ### Refresh Rate
 
@@ -350,27 +357,35 @@ TermLogger maps between logging modes and rig modes:
 
 ## ADIF Import/Export
 
+Import and export is managed through the **Log Manager (F6)**.
+
 ### Importing ADIF
 
-Press **F2** to import:
-
-1. Select the ADIF file to import
-2. QSOs are added to your log
-3. Duplicates are skipped
+1. Open Log Manager with **F6**
+2. Click **Import (I)** button
+3. Select the ADIF file to import
+4. A new log is created with the imported QSOs
 
 ### Exporting ADIF
 
-Press **F3** to export:
+1. Open Log Manager with **F6**
+2. Select the log you want to export
+3. Click **Export (E)** button
+4. Choose export format: ADIF, POTA, or Cabrillo
 
-1. Choose the save location
-2. All QSOs are exported in ADIF 3.1 format
+### Quick Export (Current Mode)
+
+For quick exports while in an active operating mode:
+- **Ctrl+E** - Export current mode as ADIF
+- **Ctrl+P** - Export current POTA activation
 
 ### POTA ADIF Export
 
-In POTA mode, exports include:
+POTA-formatted exports include:
 - `MY_SIG=POTA`
 - `MY_SIG_INFO=K-1234` (your park)
 - `SIG=POTA` and `SIG_INFO` for P2P contacts
+- POTA-standard filename format: `callsign@park-YYYYMMDD.adi`
 
 ---
 
@@ -415,16 +430,18 @@ Press **Ctrl+S** to open the Settings screen.
 
 | Key | Action |
 |-----|--------|
-| Ctrl+Q | Quit application |
-| Ctrl+S | Open settings |
-| Ctrl+N | Start new operating mode |
-| Ctrl+E | End current operating mode |
-| Ctrl+L | Open log browser |
 | F1 | Help |
-| F2 | Import ADIF |
-| F3 | Export ADIF |
+| F2 | New mode / End mode (toggle) |
+| F3 | Clear form |
 | F5 | Lookup callsign |
+| F6 | Log manager (export/import/archive) |
+| F7 | Browse log |
+| F9 | Settings |
 | F10 | Exit |
+| Ctrl+E | Export ADIF (current mode) |
+| Ctrl+I | Import ADIF |
+| Ctrl+P | Export POTA log (current mode) |
+| Ctrl+F | Manual tune (frequency/mode) |
 
 ### QSO Entry
 
@@ -493,5 +510,5 @@ Press **Ctrl+S** to open the Settings screen.
 ## Getting Help
 
 - Press **F1** for quick help
-- Report issues at: https://github.com/yourusername/TermLogger/issues
+- Report issues at: https://github.com/lacy-digital-labs/TermLogger/issues
 - Join the discussion on the project's GitHub page

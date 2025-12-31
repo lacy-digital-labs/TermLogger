@@ -29,6 +29,67 @@ from ..modes import (
 from ..modes.fieldday import ARRL_SECTIONS
 
 
+class ExportSelectScreen(ModalScreen[Optional[str]]):
+    """Screen for selecting export format."""
+
+    CSS = """
+    ExportSelectScreen {
+        align: center middle;
+    }
+
+    ExportSelectScreen > Vertical {
+        width: 50;
+        height: auto;
+        border: thick $primary;
+        background: $surface;
+        padding: 1;
+    }
+
+    .export-title {
+        text-align: center;
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    .export-buttons {
+        height: auto;
+        align: center middle;
+        margin-top: 1;
+    }
+
+    .export-buttons Button {
+        margin: 0 1;
+        min-width: 16;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Static("Export Log", classes="export-title")
+            with Horizontal(classes="export-buttons"):
+                yield Button("ADIF", variant="primary", id="adif")
+                yield Button("Cabrillo", variant="default", id="cabrillo")
+                yield Button("POTA", variant="default", id="pota")
+            with Horizontal(classes="export-buttons"):
+                yield Button("Cancel", variant="default", id="cancel")
+
+    @on(Button.Pressed, "#adif")
+    def _on_adif(self) -> None:
+        self.dismiss("adif")
+
+    @on(Button.Pressed, "#cabrillo")
+    def _on_cabrillo(self) -> None:
+        self.dismiss("cabrillo")
+
+    @on(Button.Pressed, "#pota")
+    def _on_pota(self) -> None:
+        self.dismiss("pota")
+
+    @on(Button.Pressed, "#cancel")
+    def _on_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class ModeSelectScreen(ModalScreen[Optional[ModeType | str]]):
     """Screen for selecting an operating mode."""
 

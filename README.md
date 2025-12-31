@@ -10,6 +10,8 @@ A terminal-based amateur radio logging application built with Python and Textual
 - **Callsign lookup** - QRZ.com and HamQTH integration
 - **Real-time DX spots** - DX cluster spots via HamQTH web API
 - **POTA spots** - Parks on the Air spot integration from pota.app
+- **POTA park database** - Automatic park info lookup with name, location, and grid square
+- **Rig control** - Hamlib (rigctld) and Flex Radio SmartSDR integration with auto-QSY
 
 ### Operating Modes
 
@@ -66,21 +68,21 @@ termlogger
 | Tab / Shift-Tab | Navigate fields |
 | Enter | Log QSO |
 | F1 | Help |
-| F2 | Import ADIF |
-| F3 | Export ADIF |
+| F2 | New mode / End mode (toggle) |
+| F3 | Clear form |
 | F5 | Lookup callsign |
+| F6 | Log manager (export/import/archive) |
+| F7 | Browse log |
+| F9 | Settings |
 | F10 | Exit |
-| Ctrl+N | Start new operating mode |
-| Ctrl+E | End current mode |
-| Ctrl+S | Settings |
-| Ctrl+L | Log browser |
-| Ctrl+Q | Quit |
+| Ctrl+F | Manual tune (frequency/mode) |
 
 ### Spots Table
 
 - Click on **Band** column header to cycle through band filters
 - Click on **Mode** column header to cycle through mode filters
 - Click on any spot row to auto-fill the QSO entry form
+- POTA spots display park info (name, location, grid) when selected
 
 ## Configuration
 
@@ -139,8 +141,10 @@ Example: `25.12.01` is the first release in December 2025.
 
 ## License
 
-MIT
+MIT License - See [LICENSE](LICENSE) for details.
 
 ## Contributing
 
-Contributions are welcome! Please see [RELEASING.md](docs/RELEASING.md) for release procedures.
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting pull requests.
+
+All contributors must agree to the Developer Certificate of Origin (DCO) by signing off on their commits. See the contributing guide for details.
