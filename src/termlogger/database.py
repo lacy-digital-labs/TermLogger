@@ -129,6 +129,11 @@ class Database:
             """)
             conn.commit()
 
+        # Check if source column exists in qsos table
+        if "source" not in columns:
+            cursor.execute("ALTER TABLE qsos ADD COLUMN source TEXT DEFAULT 'manual'")
+            conn.commit()
+
         # Create index on logs table
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_logs_active
@@ -151,8 +156,8 @@ class Database:
                 INSERT INTO qsos (
                     callsign, frequency, mode, rst_sent, rst_received,
                     datetime_utc, notes, contest_id, exchange_sent, exchange_received,
-                    log_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    log_id, source
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     qso.callsign.upper(),
@@ -166,6 +171,7 @@ class Database:
                     qso.exchange_sent,
                     qso.exchange_received,
                     effective_log_id,
+                    qso.source,
                 ),
             )
             conn.commit()
@@ -321,6 +327,13 @@ class Database:
         except (KeyError, IndexError):
             pass
 
+        # Handle source which may not exist in older databases during migration
+        source = "manual"
+        try:
+            source = row["source"]
+        except (KeyError, IndexError):
+            pass
+
         return QSO(
             id=row["id"],
             callsign=row["callsign"],
@@ -331,6 +344,7 @@ class Database:
             datetime_utc=datetime.fromisoformat(row["datetime_utc"]),
             notes=row["notes"] or "",
             log_id=log_id,
+            source=source,
             contest_id=row["contest_id"],
             exchange_sent=row["exchange_sent"],
             exchange_received=row["exchange_received"],

@@ -18,7 +18,7 @@ from ..adif import export_adif_file, export_pota_adif, get_pota_filename, parse_
 from ..callsign import LookupError
 from ..config import DXClusterSource, RigControlType
 from ..database import Database
-from ..models import CallsignLookupResult, Spot, format_frequency
+from ..models import CallsignLookupResult, QSO, Spot, format_frequency
 from ..modes import (
     ContestMode,
     FieldDayMode,
@@ -35,6 +35,7 @@ from ..services import (
     POTASpotService,
     RigctldService,
     RigState,
+    UDPLogServer,
 )
 from ..widgets.qso_entry import QSOEntryForm
 from ..widgets.qso_table import QSOTable
@@ -314,6 +315,7 @@ class MainScreen(Screen):
         self._flexradio_service: Optional[FlexRadioService] = None
         self._rig_poll_timer: Optional[Timer] = None
         self._rig_has_error = False  # Track if rig control is failing
+        self._udp_log_server: Optional[UDPLogServer] = None
 
     def compose(self) -> ComposeResult:
         """Create child widgets."""
@@ -385,6 +387,16 @@ class MainScreen(Screen):
                 on_state_change=self._on_flex_state_change,
             )
             self._start_rig_polling()
+
+        # Initialize UDP log server if enabled
+        if self.app.config.udp_log_server_enabled:
+            self._udp_log_server = UDPLogServer(
+                host=self.app.config.udp_log_server_host,
+                port=self.app.config.udp_log_server_port,
+                on_qso_received=self._on_udp_qso_received,
+            )
+            # Start the server
+            self.run_worker(self._start_udp_server(), exclusive=False, name="udp_server")
 
     def _load_active_log(self) -> None:
         """Load the active log from database."""
@@ -573,6 +585,57 @@ class MainScreen(Screen):
             await self._rigctld_service.close()
         if self._flexradio_service:
             await self._flexradio_service.close()
+        if self._udp_log_server:
+            await self._udp_log_server.stop()
+
+    # UDP Log Server methods
+    async def _start_udp_server(self) -> None:
+        """Start the UDP log server."""
+        if self._udp_log_server:
+            try:
+                await self._udp_log_server.start()
+                logger.info(
+                    f"UDP log server started on {self.app.config.udp_log_server_host}:"
+                    f"{self.app.config.udp_log_server_port}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to start UDP log server: {e}")
+                self.notify(
+                    f"UDP log server failed to start: {e}",
+                    severity="error",
+                    timeout=10,
+                )
+
+    def _on_udp_qso_received(self, qso: QSO, source: str) -> None:
+        """Handle QSO received from UDP log server.
+
+        Args:
+            qso: The QSO record received
+            source: Source description (e.g., "WSJT-X", "ADIF")
+        """
+        try:
+            # Set log_id if we have an active log
+            if self._active_log_id:
+                qso.log_id = self._active_log_id
+
+            # Add to database
+            qso_id = self.db.add_qso(qso)
+            logger.info(f"Added UDP QSO from {source}: {qso.callsign} (ID: {qso_id})")
+
+            # Refresh QSO table
+            self._refresh_qso_table()
+
+            # Show notification if enabled
+            if self.app.config.udp_log_server_notify:
+                self.notify(
+                    f"Logged {qso.callsign} from {source} on {format_frequency(qso.frequency)} MHz",
+                    severity="information",
+                    timeout=5,
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to add UDP QSO: {e}", exc_info=True)
+            self.notify(f"Failed to log UDP QSO: {e}", severity="error", timeout=10)
 
     def _start_spot_refresh(self) -> None:
         """Start the spot refresh timer based on current mode."""

@@ -100,6 +100,7 @@ class QSO(BaseModel):
 
     # Log association
     log_id: Optional[int] = None  # Virtual log this QSO belongs to
+    source: str = Field(default="manual")  # QSO source: manual, udp_adif, udp_wsjtx
 
     # Contest fields
     contest_id: Optional[int] = None

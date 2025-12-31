@@ -464,6 +464,53 @@ class SettingsScreen(Screen):
                             classes="help-text",
                         )
 
+            # Log Server Tab
+            with TabPane("Log Server", id="log-server-tab"):
+                with VerticalScroll():
+                    with Vertical(classes="settings-section"):
+                        yield Static("UDP Log Server", classes="section-title")
+
+                        yield Checkbox(
+                            "Enable UDP log server",
+                            value=self.config.udp_log_server_enabled,
+                            id="udp_log_server_enabled",
+                        )
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Listen Host:")
+                            yield Input(
+                                value=self.config.udp_log_server_host,
+                                placeholder="0.0.0.0",
+                                id="udp_log_server_host",
+                            )
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Listen Port:")
+                            yield Input(
+                                value=str(self.config.udp_log_server_port),
+                                placeholder="2237",
+                                id="udp_log_server_port",
+                            )
+
+                        yield Checkbox(
+                            "Show notification when QSO received",
+                            value=self.config.udp_log_server_notify,
+                            id="udp_log_server_notify",
+                        )
+
+                        yield Static(
+                            "Receive ADIF QSO records via UDP from programs like WSJT-X, Log4OM, etc.",
+                            classes="help-text",
+                        )
+                        yield Static(
+                            "Supported formats: Simple ADIF over UDP, WSJT-X LoggedADIF binary protocol",
+                            classes="help-text",
+                        )
+                        yield Static(
+                            "Default port 2237 is used by WSJT-X. Use 0.0.0.0 to listen on all interfaces.",
+                            classes="help-text",
+                        )
+
             # Defaults Tab
             with TabPane("Defaults", id="defaults-tab"):
                 with VerticalScroll():
@@ -639,6 +686,14 @@ class SettingsScreen(Screen):
         except ValueError:
             flexradio_port = 4992
 
+        # Parse UDP log server port
+        udp_port_str = self.query_one("#udp_log_server_port", Input).value.strip()
+        try:
+            udp_port = int(udp_port_str) if udp_port_str else 2237
+            udp_port = max(1024, min(65535, udp_port))
+        except ValueError:
+            udp_port = 2237
+
         return AppConfig(
             # Station info
             my_callsign=self.query_one("#my_callsign", Input).value.strip().upper(),
@@ -682,6 +737,11 @@ class SettingsScreen(Screen):
             rigctld_port=rigctld_port,
             flexradio_host=self.query_one("#flexradio_host", Input).value.strip() or "localhost",
             flexradio_port=flexradio_port,
+            # UDP Log Server
+            udp_log_server_enabled=self.query_one("#udp_log_server_enabled", Checkbox).value,
+            udp_log_server_port=udp_port,
+            udp_log_server_host=self.query_one("#udp_log_server_host", Input).value.strip() or "0.0.0.0",
+            udp_log_server_notify=self.query_one("#udp_log_server_notify", Checkbox).value,
             # Debug Logging
             debug_logging_enabled=self.query_one("#debug_logging_enabled", Checkbox).value,
             debug_log_level=self.query_one("#debug_log_level", Select).value or "INFO",

@@ -89,6 +89,12 @@ class AppConfig(BaseModel):
     flexradio_host: str = Field(default="localhost")
     flexradio_port: int = Field(default=4992, ge=1, le=65535)
 
+    # UDP Log Server
+    udp_log_server_enabled: bool = Field(default=False)
+    udp_log_server_port: int = Field(default=2237, ge=1024, le=65535)  # WSJT-X default
+    udp_log_server_host: str = Field(default="0.0.0.0")  # Listen on all interfaces
+    udp_log_server_notify: bool = Field(default=True)  # Show notification on receive
+
     # Debug Logging
     debug_logging_enabled: bool = Field(default=False)
     debug_log_level: str = Field(default="INFO")  # DEBUG, INFO, WARNING, ERROR

@@ -5,6 +5,7 @@ from .flexradio import FlexRadioError, FlexRadioService, FlexState
 from .pota_parks import Park, POTAParksError, POTAParksService
 from .pota_spots import POTASpotService
 from .rigctld import RigctldError, RigctldService, RigState
+from .udp_log_server import UDPLogServer
 
 __all__ = [
     "POTASpotService",
@@ -18,4 +19,5 @@ __all__ = [
     "FlexRadioService",
     "FlexState",
     "FlexRadioError",
+    "UDPLogServer",
 ]

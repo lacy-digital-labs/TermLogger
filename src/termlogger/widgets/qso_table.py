@@ -44,6 +44,7 @@ class QSOTable(Static):
         ("Mode", 6),
         ("Sent", 5),
         ("Recv", 5),
+        ("Src", 6),
         ("Notes", None),  # None = auto-expand to fill remaining space
     ]
 
@@ -73,6 +74,15 @@ class QSOTable(Static):
         self._qsos.insert(0, qso)
         self._refresh_table()
 
+    def _format_source(self, source: str) -> str:
+        """Format source for display."""
+        source_map = {
+            "manual": "Manual",
+            "udp_adif": "UDP",
+            "udp_wsjtx": "WSJT-X",
+        }
+        return source_map.get(source, source[:6])
+
     def _refresh_table(self) -> None:
         """Refresh the table display."""
         table = self.query_one(DataTable)
@@ -88,6 +98,7 @@ class QSOTable(Static):
                 qso.mode.value,
                 qso.rst_sent,
                 qso.rst_received,
+                self._format_source(qso.source),
                 qso.notes[:20] if qso.notes else "",
                 key=str(qso.id) if qso.id else str(i),
             )

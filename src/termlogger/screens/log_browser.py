@@ -95,6 +95,15 @@ class QSOEditModal(ModalScreen[Optional[QSO]]):
         self.qso = qso
         self.db = db
 
+    def _format_source(self, source: str) -> str:
+        """Format source for display."""
+        source_map = {
+            "manual": "Manual",
+            "udp_adif": "UDP",
+            "udp_wsjtx": "WSJT-X",
+        }
+        return source_map.get(source, source)
+
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static(f"Edit QSO #{self.qso.id}", classes="modal-title")
@@ -156,6 +165,14 @@ class QSOEditModal(ModalScreen[Optional[QSO]]):
                 yield Input(
                     value=self.qso.notes,
                     id="edit_notes",
+                )
+
+            with Horizontal(classes="edit-row"):
+                yield Label("Source:")
+                yield Input(
+                    value=self._format_source(self.qso.source),
+                    id="edit_source",
+                    disabled=True,
                 )
 
             with Horizontal(classes="edit-button-row"):
@@ -300,6 +317,7 @@ class LogBrowserScreen(Screen):
         ("Mode", 8),
         ("RST S", 6),
         ("RST R", 6),
+        ("Source", 8),
         ("Notes", 20),
     ]
 
@@ -349,6 +367,15 @@ class LogBrowserScreen(Screen):
         self._refresh_table()
         self._update_status()
 
+    def _format_source(self, source: str) -> str:
+        """Format source for display."""
+        source_map = {
+            "manual": "Manual",
+            "udp_adif": "UDP",
+            "udp_wsjtx": "WSJT-X",
+        }
+        return source_map.get(source, source[:8])
+
     def _refresh_table(self) -> None:
         """Refresh the table display (newest QSOs first)."""
         table = self.query_one(DataTable)
@@ -365,6 +392,7 @@ class LogBrowserScreen(Screen):
                 qso.mode.value,
                 qso.rst_sent,
                 qso.rst_received,
+                self._format_source(qso.source),
                 (qso.notes[:20] + "...") if len(qso.notes) > 20 else qso.notes,
                 key=str(qso.id) if qso.id else None,
             )
