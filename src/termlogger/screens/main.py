@@ -772,6 +772,14 @@ class MainScreen(Screen):
 
         self.notify(f"Selected {spot.callsign} on {spot.frequency:.3f} MHz", timeout=2)
 
+    def on_spots_table_spot_aged_out(self, event: SpotsTable.SpotAgedOut) -> None:
+        """Handle notification when a selected spot ages out."""
+        self.notify(
+            f"Selected spot {event.callsign} aged out - pinned to top",
+            severity="information",
+            timeout=5,
+        )
+
     async def _lookup_park(self, park_reference: str) -> Optional[Park]:
         """Look up POTA park information."""
         if not self._pota_parks_service:
