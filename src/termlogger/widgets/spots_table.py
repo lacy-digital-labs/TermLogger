@@ -3,9 +3,14 @@
 import logging
 from typing import Optional
 
+from rich.console import RenderableType
+from rich.text import Text
 from textual.app import ComposeResult
+from textual.containers import Horizontal
 from textual.coordinate import Coordinate
+from textual.events import MouseDown
 from textual.message import Message
+from textual.widget import Widget
 from textual.widgets import DataTable, Static
 
 from ..models import Spot, format_frequency
@@ -18,6 +23,53 @@ FILTER_MODES = ["All", "CW", "SSB", "FT8", "FT4", "RTTY", "FM", "DIGITAL"]
 
 # Bands to filter by (in cycle order)
 FILTER_BANDS = ["All", "160m", "80m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "2m"]
+
+
+class FilterAction(Widget):
+    """Clickable filter action widget (similar to FooterKey)."""
+
+    DEFAULT_CSS = """
+    FilterAction {
+        width: auto;
+        height: 1;
+        background: $panel;
+        color: $text;
+        padding: 0 1;
+    }
+
+    FilterAction:hover {
+        background: $accent;
+        color: $text;
+        text-style: bold;
+    }
+    """
+
+    class Clicked(Message):
+        """Message sent when filter action is clicked."""
+
+        def __init__(self, action_id: str) -> None:
+            self.action_id = action_id
+            super().__init__()
+
+    def __init__(self, label: str, action_id: str, **kwargs) -> None:
+        """Initialize filter action.
+
+        Args:
+            label: Display label (e.g., "B: Band")
+            action_id: Action identifier (e.g., "band", "mode", "clear")
+        """
+        super().__init__(**kwargs)
+        self.label = label
+        self.action_id = action_id
+
+    def render(self) -> RenderableType:
+        """Render the filter action as clickable text."""
+        return Text(self.label, style="")
+
+    def on_mouse_down(self, event: MouseDown) -> None:
+        """Handle click by posting message."""
+        self.post_message(self.Clicked(self.action_id))
+        event.stop()
 
 
 class SpotsTable(Static):
@@ -48,7 +100,14 @@ class SpotsTable(Static):
         background: $panel;
         color: $text;
         padding: 0 1;
-        text-align: center;
+        width: 100%;
+        align: left middle;
+    }
+
+    SpotsTable .filter-separator {
+        width: auto;
+        height: 1;
+        color: $text-muted;
     }
     """
 
@@ -96,8 +155,13 @@ class SpotsTable(Static):
     def compose(self) -> ComposeResult:
         """Create child widgets."""
         yield Static(f"[bold]{self._title}[/bold]", classes="spots-header", id="spots-title")
+        with Horizontal(id="filter-status-bar", classes="filter-status"):
+            yield FilterAction("B: Band", "band", id="band-action")
+            yield Static(" | ", classes="filter-separator")
+            yield FilterAction("M: Mode", "mode", id="mode-action")
+            yield Static(" | ", classes="filter-separator")
+            yield FilterAction("C: Clear", "clear", id="clear-action")
         yield DataTable(id="spots-data-table", cursor_type="row")
-        yield Static("", id="filter-status", classes="filter-status")
 
     def on_mount(self) -> None:
         """Initialize the table."""
@@ -106,6 +170,15 @@ class SpotsTable(Static):
         # Add columns with keys
         for name, width, key in self.COLUMNS:
             table.add_column(name, width=width, key=key)
+
+    def on_filter_action_clicked(self, event: FilterAction.Clicked) -> None:
+        """Handle filter action clicks."""
+        if event.action_id == "band":
+            self._cycle_band_filter()
+        elif event.action_id == "mode":
+            self._cycle_mode_filter()
+        elif event.action_id == "clear":
+            self.reset_filters()
 
     def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
         """Handle header click - cycle through filter options."""
@@ -131,22 +204,8 @@ class SpotsTable(Static):
         self._apply_filters()
 
     def _update_status_bar(self) -> None:
-        """Update the status bar with filter info and keyboard hints."""
-        try:
-            status = self.query_one("#filter-status", Static)
-
-            if self._band_filter == "All" and self._mode_filter == "All":
-                status.update("[dim]B: Band | M: Mode | C: Clear filters[/dim]")
-            else:
-                filters = []
-                if self._band_filter != "All":
-                    filters.append(f"Band={self._band_filter}")
-                if self._mode_filter != "All":
-                    filters.append(f"Mode={self._mode_filter}")
-                filter_str = " ".join(filters)
-                status.update(f"[yellow]{filter_str}[/yellow] [dim]| B: Next Band | M: Next Mode | C: Clear[/dim]")
-        except Exception:
-            pass
+        """Update the status bar with filter info (no longer needed - info shown in header)."""
+        pass
 
     def _update_header(self) -> None:
         """Update the header with title and filter info."""
