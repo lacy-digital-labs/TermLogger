@@ -30,6 +30,29 @@ HELP_TEXT = """
 | **Ctrl+I** | Import ADIF |
 | **Ctrl+P** | Export POTA log |
 | **Ctrl+F** | Manual tune (frequency/mode) |
+| **Ctrl+R** | Refresh current field (from rig or PC time/date) |
+| **F8** | Read frequency/mode from radio |
+
+### Field Shortcuts
+
+When focused in a field, you can use these shortcuts:
+
+| Key | Action |
+|-----|--------|
+| **+** / **-** | Increment/decrement value based on cursor position |
+| **Ctrl+R** | Refresh from rig (freq/mode) or PC (time/date) |
+
+**Increment/Decrement Behavior:**
+
+- **Frequency**: Cursor on MHz → ±1 MHz, cursor on decimals → ±0.1/0.01/0.001 MHz
+- **RST (Sent/Rcvd)**: Cursor on digit → increment/decrement that digit (0-9 with rollover)
+- **UTC Time**: Cursor on hours → ±1 hour, cursor on minutes → ±1 minute (rolls over to next/prev day)
+- **Date**: Cursor on year → ±1 year, month → ±1 month, day → ±1 day (handles month boundaries)
+
+**Clickable Labels:**
+
+- Click **Freq:** or **Mode:** → Read from radio
+- Click **UTC:** or **Date:** → Read current time/date from computer
 
 ---
 

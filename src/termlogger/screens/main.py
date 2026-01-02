@@ -269,12 +269,14 @@ class MainScreen(Screen):
         ("f5", "lookup_callsign", "Lookup"),
         ("f6", "manage_logs", "Logs"),
         ("f7", "browse_log", "Browse"),
+        ("f8", "read_from_rig", "Read Rig"),
         ("f9", "show_settings", "Settings"),
         ("f10", "quit", "Exit"),
         ("ctrl+e", "export_adif", "Export ADIF"),
         ("ctrl+i", "import_adif", "Import ADIF"),
         ("ctrl+p", "export_pota", "Export POTA"),
         ("ctrl+f", "manual_tune", "Tune"),
+        ("ctrl+r", "refresh_current_field", "Refresh"),
         ("b", "cycle_band_filter", "Cycle Band"),
         ("m", "cycle_mode_filter", "Cycle Mode"),
         ("c", "clear_spot_filters", "Clear Filters"),
@@ -913,6 +915,18 @@ class MainScreen(Screen):
         if event.callsign:
             self._do_lookup(event.callsign)
 
+    def on_clickable_label_clicked(self, event) -> None:
+        """Handle clickable label clicks from QSO entry form."""
+        # Import here to avoid circular dependency
+        from ..widgets.qso_entry import ClickableLabel
+
+        if isinstance(event, ClickableLabel.Clicked):
+            if event.action_id == "read-rig":
+                self._update_frequency_from_rig()
+            elif event.action_id == "read-time":
+                form = self.query_one(QSOEntryForm)
+                form.update_datetime()
+
     def _do_lookup(self, callsign: str) -> None:
         """Perform async callsign lookup."""
         callsign_info = self.query_one(CallsignInfo)
@@ -1431,6 +1445,33 @@ class MainScreen(Screen):
                 severity="warning",
                 timeout=3,
             )
+
+    def action_read_from_rig(self) -> None:
+        """Read frequency and mode from radio and update QSO form."""
+        self._update_frequency_from_rig()
+
+    def action_refresh_current_field(self) -> None:
+        """Context-aware refresh - update current field from rig or computer."""
+        try:
+            # Get the currently focused widget
+            focused = self.app.focused
+            if not focused or not hasattr(focused, 'id'):
+                return
+
+            field_id = focused.id
+
+            # Context-aware behavior based on focused field
+            if field_id in ("frequency", "mode"):
+                # Read from rig
+                self._update_frequency_from_rig()
+            elif field_id in ("time", "date"):
+                # Read current time/date from computer
+                form = self.query_one(QSOEntryForm)
+                form.update_datetime()
+            # For any other field, do nothing
+
+        except Exception as e:
+            logger.debug(f"Refresh field failed: {e}")
 
     def action_cycle_band_filter(self) -> None:
         """Cycle through band filters for spots table."""
