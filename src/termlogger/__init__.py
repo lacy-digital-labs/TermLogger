@@ -1,3 +1,3 @@
 """TermLogger - Terminal Amateur Radio Logging Application."""
 
-__version__ = "25.12.04"
+__version__ = "26.01.01"
