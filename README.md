@@ -7,6 +7,7 @@ A terminal-based amateur radio logging application built with Python and Textual
 - **Fast keyboard-driven QSO logging** - Optimized for rapid contest and everyday logging
 - **Real-time dupe checking** - Instant duplicate contact detection
 - **ADIF import/export** - Full ADIF 3.1 support for log interchange
+- **ADIF log receive server** - Receive logs on UDP ADIF and WSJTX format
 - **Callsign lookup** - QRZ.com and HamQTH integration
 - **Real-time DX spots** - DX cluster spots via HamQTH web API
 - **POTA spots** - Parks on the Air spot integration from pota.app
