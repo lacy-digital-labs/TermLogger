@@ -2,7 +2,7 @@
 
 import logging
 from typing import Optional
-from urllib.parse import parse_qs, urlencode
+from urllib.parse import parse_qs
 
 import httpx
 
