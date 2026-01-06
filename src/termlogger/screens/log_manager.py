@@ -27,19 +27,17 @@ class LogCreateModal(ModalScreen[Optional[Log]]):
         height: auto;
         background: $surface;
         border: heavy $primary;
-        padding: 1 2;
+        padding: 0 1;
     }
 
     LogCreateModal .title {
         text-align: center;
         text-style: bold;
-        padding-bottom: 1;
         color: $primary;
     }
 
     LogCreateModal .form-row {
         height: 3;
-        margin-bottom: 1;
     }
 
     LogCreateModal Label {
@@ -58,7 +56,6 @@ class LogCreateModal(ModalScreen[Optional[Log]]):
 
     LogCreateModal .button-row {
         height: 3;
-        margin-top: 1;
         align: center middle;
     }
 
@@ -162,26 +159,24 @@ class LogManagerScreen(ModalScreen[Optional[int]]):
         height: 85%;
         background: $surface;
         border: heavy $primary;
-        padding: 1 2;
+        padding: 0 1;
     }
 
     LogManagerScreen .title {
         text-align: center;
         text-style: bold;
-        padding-bottom: 1;
         color: $primary;
-        height: 2;
+        height: 1;
     }
 
     LogManagerScreen .tab-row {
         height: 3;
         align: center middle;
-        margin-bottom: 1;
     }
 
     LogManagerScreen .tab-row Button {
         margin: 0 1;
-        min-width: 16;
+        min-width: 10;
     }
 
     LogManagerScreen .tab-active {
@@ -191,21 +186,19 @@ class LogManagerScreen(ModalScreen[Optional[int]]):
 
     LogManagerScreen DataTable {
         height: 1fr;
-        margin-bottom: 1;
     }
 
     LogManagerScreen .button-row {
-        height: 3;
+        height: auto;
         align: center middle;
     }
 
     LogManagerScreen .button-row Button {
-        margin: 0 1;
+        margin: 0 0;
     }
 
     LogManagerScreen .info-row {
         height: 1;
-        margin-bottom: 1;
         color: $text-muted;
     }
     """
@@ -230,16 +223,20 @@ class LogManagerScreen(ModalScreen[Optional[int]]):
         with Vertical():
             yield Static("Log Manager", classes="title")
             with Horizontal(classes="tab-row"):
-                yield Button("Active Logs", id="tab-active", variant="primary", classes="tab-active")
-                yield Button("Archived Logs", id="tab-archived", variant="default")
+                yield Button("Active Logs", id="tab-active", classes="tab-active")
+                yield Button("Archived Logs", id="tab-archived")
+                yield Button("New", id="new-log")
+                yield Button("Select", id="select-log")
             yield Static("", id="active-info", classes="info-row")
             yield DataTable(id="logs-table", cursor_type="row")
             with Horizontal(classes="button-row"):
-                yield Button("New (N)", id="new-log", variant="primary")
-                yield Button("Select", id="select-log", variant="success")
-                yield Button("Export (E)", id="export-log")
-                yield Button("Import (I)", id="import-log")
-                yield Button("Archive (A)", id="archive-log", variant="warning")
+                yield Button("Export", id="export-log")
+                yield Button("Exp All", id="export-all")
+                yield Button("Import", id="import-log")
+                yield Button("QRZ Up", id="qrz-upload")
+                yield Button("QRZ Down", id="qrz-download")
+                yield Button("ClubLog", id="clublog-upload")
+                yield Button("Archive", id="archive-log")
                 yield Button("Close", id="close")
 
     def on_mount(self) -> None:
@@ -383,6 +380,45 @@ class LogManagerScreen(ModalScreen[Optional[int]]):
 
         self.app.push_screen(ExportSelectScreen(), handle_export_select)
 
+    @on(Button.Pressed, "#export-all")
+    def action_export_all(self) -> None:
+        """Export all QSOs to ADIF for backup."""
+        from ..adif import export_adif_file
+        from .file_picker import ExportCompleteScreen, FilePickerScreen
+
+        # Get ALL QSOs (no log_id filter)
+        qsos = self.db.get_all_qsos(limit=100000)
+        if not qsos:
+            self.notify("No QSOs to export", severity="warning")
+            return
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        default_filename = f"termlogger_backup_{timestamp}.adi"
+
+        def handle_export(path: Optional[Path]) -> None:
+            if path is None:
+                return
+            try:
+                export_adif_file(qsos, path)
+                self.app.push_screen(
+                    ExportCompleteScreen(
+                        f"Exported full backup to:\n{path}\n\nTotal QSOs: {len(qsos)}"
+                    )
+                )
+            except Exception as e:
+                self.notify(f"Export failed: {e}", severity="error")
+
+        self.app.push_screen(
+            FilePickerScreen(
+                title="Export All QSOs (Backup)",
+                start_path=Path.home(),
+                extensions=[".adi", ".adif"],
+                save_mode=True,
+                default_filename=default_filename,
+            ),
+            handle_export,
+        )
+
     def _do_export(self, log: Log, export_type: str) -> None:
         """Perform the export for the given log."""
         from ..adif import export_adif_file, export_pota_adif, get_pota_filename
@@ -508,6 +544,187 @@ class LogManagerScreen(ModalScreen[Optional[int]]):
             ),
             handle_import,
         )
+
+    @on(Button.Pressed, "#qrz-upload")
+    def action_qrz_upload(self) -> None:
+        """Upload QSOs to QRZ Logbook."""
+        # Check API key
+        if not self.app.config.qrz_api_key:
+            self.notify("QRZ API key not configured - set it in Settings (F9)", severity="error")
+            return
+
+        table = self.query_one("#logs-table", DataTable)
+        if table.cursor_row is None or table.cursor_row >= len(self._logs):
+            self.notify("Select a log to upload", severity="warning")
+            return
+
+        log = self._logs[table.cursor_row]
+
+        # Get QSOs that haven't been uploaded yet
+        qsos = self.db.get_qsos_without_qrz_logid(log_id=log.id)
+        if not qsos:
+            self.notify("All QSOs in this log have already been uploaded to QRZ", severity="information")
+            return
+
+        self.notify(f"Uploading {len(qsos)} QSOs to QRZ...", severity="information")
+
+        # Run the upload in background
+        self._run_qrz_upload(log, qsos)
+
+    def _run_qrz_upload(self, log: Log, qsos: list) -> None:
+        """Run the QRZ upload asynchronously."""
+        import asyncio
+
+        from ..services.qrz_logbook import QRZLogbookError, QRZLogbookService
+
+        async def do_upload():
+            service = QRZLogbookService(self.app.config.qrz_api_key)
+            try:
+                success, failed, results = await service.upload_qsos(qsos)
+
+                # Update qrz_logid for successfully uploaded QSOs
+                for qso, logid in results:
+                    if logid and qso.id:
+                        self.db.update_qso_qrz_logid(qso.id, logid)
+
+                self.notify(
+                    f"QRZ Upload complete: {success} uploaded, {failed} failed",
+                    severity="information" if failed == 0 else "warning",
+                )
+            except QRZLogbookError as e:
+                self.notify(f"QRZ upload error: {e}", severity="error")
+            finally:
+                await service.close()
+
+        asyncio.create_task(do_upload())
+
+    @on(Button.Pressed, "#qrz-download")
+    def action_qrz_download(self) -> None:
+        """Download QSOs from QRZ Logbook."""
+        # Check API key
+        if not self.app.config.qrz_api_key:
+            self.notify("QRZ API key not configured - set it in Settings (F9)", severity="error")
+            return
+
+        table = self.query_one("#logs-table", DataTable)
+        if table.cursor_row is None or table.cursor_row >= len(self._logs):
+            self.notify("Select a log to download into", severity="warning")
+            return
+
+        log = self._logs[table.cursor_row]
+
+        self.notify("Downloading QSOs from QRZ...", severity="information")
+
+        # Run the download in background
+        self._run_qrz_download(log)
+
+    def _run_qrz_download(self, log: Log) -> None:
+        """Run the QRZ download asynchronously."""
+        import asyncio
+
+        from ..services.qrz_logbook import QRZLogbookError, QRZLogbookService
+
+        async def do_download():
+            service = QRZLogbookService(self.app.config.qrz_api_key)
+            try:
+                qsos = await service.fetch_all_qsos()
+
+                if not qsos:
+                    self.notify("No QSOs found in QRZ logbook", severity="information")
+                    return
+
+                # Import QSOs, skipping duplicates
+                imported = 0
+                skipped = 0
+                for qso in qsos:
+                    # Check for duplicate
+                    existing = self.db.find_duplicate_qso(
+                        qso.callsign,
+                        qso.datetime_utc,
+                        qso.frequency,
+                        log_id=log.id,
+                    )
+                    if existing:
+                        skipped += 1
+                        continue
+
+                    # Add to database with log association
+                    qso.log_id = log.id
+                    self.db.add_qso(qso)
+                    imported += 1
+
+                self._refresh_logs()
+                self.notify(
+                    f"QRZ Download complete: {imported} imported, {skipped} duplicates skipped",
+                    severity="information",
+                )
+            except QRZLogbookError as e:
+                self.notify(f"QRZ download error: {e}", severity="error")
+            finally:
+                await service.close()
+
+        asyncio.create_task(do_download())
+
+    @on(Button.Pressed, "#clublog-upload")
+    def action_clublog_upload(self) -> None:
+        """Upload QSOs to Club Log."""
+        # Check credentials
+        if not self.app.config.clublog_email or not self.app.config.clublog_api_key:
+            self.notify("Club Log credentials not configured - set them in Settings (F9)", severity="error")
+            return
+
+        table = self.query_one("#logs-table", DataTable)
+        if table.cursor_row is None or table.cursor_row >= len(self._logs):
+            self.notify("Select a log to upload", severity="warning")
+            return
+
+        log = self._logs[table.cursor_row]
+
+        # Get QSOs that haven't been uploaded yet
+        qsos = self.db.get_qsos_not_uploaded_to_clublog(log_id=log.id)
+        if not qsos:
+            self.notify("All QSOs in this log have already been uploaded to Club Log", severity="information")
+            return
+
+        self.notify(f"Uploading {len(qsos)} QSOs to Club Log...", severity="information")
+
+        # Run the upload in background
+        self._run_clublog_upload(log, qsos)
+
+    def _run_clublog_upload(self, log: Log, qsos: list) -> None:
+        """Run the Club Log upload asynchronously."""
+        import asyncio
+
+        from ..services.clublog import ClubLogError, ClubLogService
+
+        async def do_upload():
+            # Use log's callsign if set, otherwise use config callsign
+            callsign = log.my_callsign or self.app.config.clublog_callsign or self.app.config.my_callsign
+            service = ClubLogService(
+                email=self.app.config.clublog_email,
+                password=self.app.config.clublog_password,
+                callsign=callsign,
+                api_key=self.app.config.clublog_api_key,
+            )
+            try:
+                success, failed = await service.upload_qsos(qsos)
+
+                # Mark all QSOs as uploaded (batch upload is all-or-nothing)
+                if failed == 0:
+                    for qso in qsos:
+                        if qso.id:
+                            self.db.update_qso_clublog_uploaded(qso.id, True)
+
+                self.notify(
+                    f"Club Log upload complete: {success} uploaded",
+                    severity="information" if failed == 0 else "warning",
+                )
+            except ClubLogError as e:
+                self.notify(f"Club Log upload error: {e}", severity="error")
+            finally:
+                await service.close()
+
+        asyncio.create_task(do_upload())
 
     @on(Button.Pressed, "#close")
     def action_close(self) -> None:

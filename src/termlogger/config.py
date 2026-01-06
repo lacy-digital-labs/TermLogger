@@ -52,9 +52,16 @@ class AppConfig(BaseModel):
     lookup_service: LookupService = LookupService.NONE
     qrz_username: str = Field(default="")
     qrz_password: str = Field(default="")
+    qrz_api_key: str = Field(default="")  # QRZ Logbook API key
     hamqth_username: str = Field(default="")
     hamqth_password: str = Field(default="")
     auto_lookup: bool = Field(default=True)
+
+    # Club Log
+    clublog_email: str = Field(default="")  # Club Log account email
+    clublog_password: str = Field(default="")  # Club Log application password
+    clublog_callsign: str = Field(default="")  # Callsign for Club Log uploads
+    clublog_api_key: str = Field(default="")  # Club Log API key (request from helpdesk)
 
     # UI preferences
     default_mode: str = Field(default="SSB")

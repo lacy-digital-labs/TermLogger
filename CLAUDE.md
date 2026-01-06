@@ -12,12 +12,12 @@ Calendar versioning: `YY.MM.nn` (e.g., 25.12.01 = first release December 2025)
 
 ## Current Version
 
-26.01.01
+26.01.02
 
 ## Feature Roadmap
 
 ### Log Upload Services
-- [ ] QRZ logbook upload
+- [x] QRZ logbook upload and download
 - [ ] LOTW (Logbook of The World) upload (stretch goal)
 
 ### Completed Features
@@ -64,6 +64,8 @@ Calendar versioning: `YY.MM.nn` (e.g., 25.12.01 = first release December 2025)
 | `src/termlogger/services/rigctld.py` | Rig control via rigctld |
 | `src/termlogger/services/flexradio.py` | Rig control via Flex SmartSDR |
 | `src/termlogger/services/pota_parks.py` | POTA parks lookup and caching |
+| `src/termlogger/services/qrz_logbook.py` | QRZ Logbook API for upload/download |
+| `src/termlogger/services/clublog.py` | Club Log API for upload |
 
 ## Key Bindings
 
@@ -119,3 +121,21 @@ Calendar versioning: `YY.MM.nn` (e.g., 25.12.01 = first release December 2025)
 - API: https://api.pota.app/park/{reference}
 - Cache expires after 7 days
 - Displays park name, type, location, grid when spot selected
+
+### QRZ Logbook
+- API endpoint: https://logbook.qrz.com/api
+- Requires QRZ Logbook API key (subscription required)
+- API key configured in Settings → Lookup tab
+- Upload: Sends QSOs via INSERT action, tracks qrz_logid for sync
+- Download: Fetches all QSOs via FETCH action with automatic paging
+- Duplicate detection on download by callsign + datetime + frequency
+- Access via Log Manager (F6) → QRZ Upload/Download buttons
+
+### Club Log
+- API endpoints: realtime.php (single QSO), putlogs.php (batch)
+- Requires: email, application password, callsign, API key
+- API key must be requested from Club Log helpdesk
+- Credentials configured in Settings → Lookup tab
+- Upload only (no download API available)
+- Uses batch upload for efficiency
+- Access via Log Manager (F6) → Club Log button

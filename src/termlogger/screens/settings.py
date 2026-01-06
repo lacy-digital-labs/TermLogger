@@ -263,8 +263,22 @@ class SettingsScreen(Screen):
                                 classes="password-input",
                             )
 
+                        with Horizontal(classes="field-row"):
+                            yield Label("Logbook API Key:")
+                            yield Input(
+                                value=self.config.qrz_api_key,
+                                placeholder="Your QRZ Logbook API key",
+                                password=True,
+                                id="qrz_api_key",
+                                classes="password-input",
+                            )
+
                         yield Static(
                             "Note: QRZ XML API requires an XML subscription",
+                            classes="help-text",
+                        )
+                        yield Static(
+                            "Logbook API key is for uploading/downloading QSOs (requires subscription)",
                             classes="help-text",
                         )
 
@@ -291,6 +305,50 @@ class SettingsScreen(Screen):
 
                         yield Static(
                             "HamQTH is a free callsign lookup service",
+                            classes="help-text",
+                        )
+
+                    with Vertical(classes="settings-section"):
+                        yield Static("Club Log", classes="section-title")
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Email:")
+                            yield Input(
+                                value=self.config.clublog_email,
+                                placeholder="Your Club Log email",
+                                id="clublog_email",
+                            )
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("App Password:")
+                            yield Input(
+                                value=self.config.clublog_password,
+                                placeholder="Club Log application password",
+                                password=True,
+                                id="clublog_password",
+                                classes="password-input",
+                            )
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("Callsign:")
+                            yield Input(
+                                value=self.config.clublog_callsign,
+                                placeholder="Callsign for uploads",
+                                id="clublog_callsign",
+                            )
+
+                        with Horizontal(classes="field-row"):
+                            yield Label("API Key:")
+                            yield Input(
+                                value=self.config.clublog_api_key,
+                                placeholder="Club Log API key",
+                                password=True,
+                                id="clublog_api_key",
+                                classes="password-input",
+                            )
+
+                        yield Static(
+                            "Request API key from Club Log helpdesk",
                             classes="help-text",
                         )
 
@@ -710,9 +768,15 @@ class SettingsScreen(Screen):
             lookup_service=lookup_service,
             qrz_username=self.query_one("#qrz_username", Input).value.strip(),
             qrz_password=self.query_one("#qrz_password", Input).value,
+            qrz_api_key=self.query_one("#qrz_api_key", Input).value,
             hamqth_username=self.query_one("#hamqth_username", Input).value.strip(),
             hamqth_password=self.query_one("#hamqth_password", Input).value,
             auto_lookup=self.query_one("#auto_lookup", Checkbox).value,
+            # Club Log
+            clublog_email=self.query_one("#clublog_email", Input).value.strip(),
+            clublog_password=self.query_one("#clublog_password", Input).value,
+            clublog_callsign=self.query_one("#clublog_callsign", Input).value.strip().upper(),
+            clublog_api_key=self.query_one("#clublog_api_key", Input).value,
             # Defaults
             default_mode=self.query_one("#default_mode", Select).value or "SSB",
             default_rst=self.query_one("#default_rst", Input).value.strip() or "59",

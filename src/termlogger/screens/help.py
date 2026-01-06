@@ -90,8 +90,51 @@ Manage virtual logs for different activations and events.
 - **New log** - Create a new log for an activation or event
 - **Select log** - Set the active log for QSO entry
 - **Export** - Export log as ADIF, POTA, or Cabrillo format
+- **Exp All** - Export ALL QSOs to ADIF for full backup
 - **Import** - Import ADIF file into a new log
+- **QRZ Upload** - Upload QSOs to QRZ Logbook
+- **QRZ Download** - Download QSOs from QRZ Logbook
+- **Club Log** - Upload QSOs to Club Log
 - **Archive** - Archive old logs to keep them organized
+
+---
+
+## QRZ Logbook Sync
+
+Sync your QSOs with QRZ.com Logbook for backup and sharing.
+
+**Requirements:**
+- QRZ Logbook API key (requires QRZ subscription)
+- Configure API key in **Settings** (F9) → **Lookup** tab
+
+**Upload:**
+1. Open Log Manager (F6)
+2. Select the log to upload
+3. Click **QRZ Upload**
+4. Only new QSOs (not previously uploaded) are sent
+
+**Download:**
+1. Open Log Manager (F6)
+2. Select the log to import into
+3. Click **QRZ Download**
+4. Duplicate QSOs are automatically skipped
+
+---
+
+## Club Log Upload
+
+Upload your QSOs to Club Log for DXCC tracking and statistics.
+
+**Requirements:**
+- Club Log API key (request from helpdesk)
+- Email, application password, and callsign
+- Configure in **Settings** (F9) → **Lookup** tab
+
+**Upload:**
+1. Open Log Manager (F6)
+2. Select the log to upload
+3. Click **Club Log**
+4. Only new QSOs (not previously uploaded) are sent
 
 ---
 
@@ -261,7 +304,7 @@ class SplashScreen(ModalScreen[None]):
         height: auto;
         background: $surface;
         border: heavy $primary;
-        padding: 1 2;
+        padding: 0 2;
     }
 
     SplashScreen .logo {
@@ -275,21 +318,18 @@ class SplashScreen(ModalScreen[None]):
         width: 100%;
         text-align: center;
         color: $accent;
-        margin-top: 1;
     }
 
     SplashScreen .tagline {
         width: 100%;
         text-align: center;
         color: $text;
-        margin-top: 1;
     }
 
     SplashScreen .attribution {
         width: 100%;
         text-align: center;
         color: $text-muted;
-        margin-top: 2;
     }
 
     SplashScreen .company {
@@ -297,23 +337,25 @@ class SplashScreen(ModalScreen[None]):
         text-align: center;
         color: $text-muted;
         text-style: italic;
+        margin-top: 1;
     }
 
     SplashScreen .hint {
         width: 100%;
         text-align: center;
         color: $text-disabled;
-        margin-top: 2;
+        margin-top: 1;
     }
     """
 
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static(LOGO, classes="logo")
-            yield Static("Version 26.01.01", classes="version")
+            yield Static("Version 26.01.02", classes="version")
             yield Static("Terminal-Based Amateur Radio Logging", classes="tagline")
-            yield Static("Created by Stacy Lacy", classes="attribution")
             yield Static("Lacy Digital Labs, LLC", classes="company")
+            yield Static("Created by Stacy Lacy, NQ0S", classes="attribution")
+            yield Static("Contributor: Jon Lacy, KD5RYN", classes="attribution")
             yield Static("Press any key to continue...", classes="hint")
 
     def on_key(self, event) -> None:

@@ -134,6 +134,20 @@ class Database:
             cursor.execute("ALTER TABLE qsos ADD COLUMN source TEXT DEFAULT 'manual'")
             conn.commit()
 
+        # Check if qrz_logid column exists in qsos table
+        if "qrz_logid" not in columns:
+            cursor.execute("ALTER TABLE qsos ADD COLUMN qrz_logid TEXT")
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_qsos_qrz_logid
+                ON qsos(qrz_logid)
+            """)
+            conn.commit()
+
+        # Check if clublog_uploaded column exists in qsos table
+        if "clublog_uploaded" not in columns:
+            cursor.execute("ALTER TABLE qsos ADD COLUMN clublog_uploaded INTEGER DEFAULT 0")
+            conn.commit()
+
         # Create index on logs table
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_logs_active
@@ -318,6 +332,88 @@ class Database:
             cursor.execute(query, params)
             return cursor.fetchone()[0]
 
+    def update_qso_qrz_logid(self, qso_id: int, qrz_logid: str) -> bool:
+        """Update the QRZ logid for a QSO after successful upload."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE qsos SET qrz_logid = ? WHERE id = ?",
+                (qrz_logid, qso_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_qsos_without_qrz_logid(self, log_id: Optional[int] = None) -> list[QSO]:
+        """Get QSOs that haven't been uploaded to QRZ (no qrz_logid)."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            query = "SELECT * FROM qsos WHERE (qrz_logid IS NULL OR qrz_logid = '')"
+            params: list = []
+
+            if log_id is not None:
+                query += " AND log_id = ?"
+                params.append(log_id)
+
+            query += " ORDER BY datetime_utc ASC"
+            cursor.execute(query, params)
+            return [self._row_to_qso(row) for row in cursor.fetchall()]
+
+    def find_duplicate_qso(
+        self, callsign: str, datetime_utc: datetime, frequency: float, log_id: Optional[int] = None
+    ) -> Optional[QSO]:
+        """Find a duplicate QSO by callsign, datetime, and frequency."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # Match within 1 minute and 0.01 MHz
+            query = """
+                SELECT * FROM qsos
+                WHERE UPPER(callsign) = ?
+                AND datetime_utc BETWEEN ? AND ?
+                AND frequency BETWEEN ? AND ?
+            """
+            params = [
+                callsign.upper(),
+                (datetime_utc.replace(second=0, microsecond=0)).isoformat(),
+                (datetime_utc.replace(second=59, microsecond=999999)).isoformat(),
+                frequency - 0.01,
+                frequency + 0.01,
+            ]
+
+            if log_id is not None:
+                query += " AND log_id = ?"
+                params.append(log_id)
+
+            query += " LIMIT 1"
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+            return self._row_to_qso(row) if row else None
+
+    def update_qso_clublog_uploaded(self, qso_id: int, uploaded: bool = True) -> bool:
+        """Update the Club Log uploaded status for a QSO."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE qsos SET clublog_uploaded = ? WHERE id = ?",
+                (1 if uploaded else 0, qso_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_qsos_not_uploaded_to_clublog(self, log_id: Optional[int] = None) -> list[QSO]:
+        """Get QSOs that haven't been uploaded to Club Log."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            query = "SELECT * FROM qsos WHERE (clublog_uploaded IS NULL OR clublog_uploaded = 0)"
+            params: list = []
+
+            if log_id is not None:
+                query += " AND log_id = ?"
+                params.append(log_id)
+
+            query += " ORDER BY datetime_utc ASC"
+            cursor.execute(query, params)
+            return [self._row_to_qso(row) for row in cursor.fetchall()]
+
     def _row_to_qso(self, row: sqlite3.Row) -> QSO:
         """Convert a database row to a QSO object."""
         # Handle log_id which may not exist in older databases during migration
@@ -334,6 +430,20 @@ class Database:
         except (KeyError, IndexError):
             pass
 
+        # Handle qrz_logid which may not exist in older databases during migration
+        qrz_logid = None
+        try:
+            qrz_logid = row["qrz_logid"]
+        except (KeyError, IndexError):
+            pass
+
+        # Handle clublog_uploaded which may not exist in older databases during migration
+        clublog_uploaded = False
+        try:
+            clublog_uploaded = bool(row["clublog_uploaded"])
+        except (KeyError, IndexError):
+            pass
+
         return QSO(
             id=row["id"],
             callsign=row["callsign"],
@@ -345,6 +455,8 @@ class Database:
             notes=row["notes"] or "",
             log_id=log_id,
             source=source,
+            qrz_logid=qrz_logid,
+            clublog_uploaded=clublog_uploaded,
             contest_id=row["contest_id"],
             exchange_sent=row["exchange_sent"],
             exchange_received=row["exchange_received"],

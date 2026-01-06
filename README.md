@@ -9,6 +9,8 @@ A terminal-based amateur radio logging application built with Python and Textual
 - **ADIF import/export** - Full ADIF 3.1 support for log interchange
 - **ADIF log receive server** - Receive logs on UDP ADIF and WSJTX format
 - **Callsign lookup** - QRZ.com and HamQTH integration
+- **QRZ Logbook sync** - Upload and download QSOs to/from QRZ.com Logbook
+- **Club Log upload** - Upload QSOs to Club Log
 - **Real-time DX spots** - DX cluster spots via HamQTH web API
 - **POTA spots** - Parks on the Air spot integration from pota.app
 - **POTA park database** - Automatic park info lookup with name, location, and grid square
@@ -91,10 +93,34 @@ Configuration is stored in `~/.config/termlogger/config.json`.
 
 ### Callsign Lookup
 
-To enable callsign lookup, configure your credentials in Settings (Ctrl+S):
+To enable callsign lookup, configure your credentials in Settings (F9):
 
 - **QRZ.com** - Requires XML subscription
 - **HamQTH** - Free registration at hamqth.com
+
+### QRZ Logbook Sync
+
+Sync your QSOs with QRZ.com Logbook:
+
+1. Get your Logbook API key from qrz.com (requires subscription)
+2. Enter API key in Settings (F9) → Lookup tab
+3. Use Log Manager (F6) → QRZ Upload/Download buttons
+
+Features:
+- Upload only sends QSOs not previously uploaded
+- Download skips duplicate QSOs automatically
+
+### Club Log Upload
+
+Upload your QSOs to Club Log:
+
+1. Request an API key from Club Log helpdesk
+2. Enter credentials in Settings (F9) → Lookup tab:
+   - Email: Your Club Log account email
+   - App Password: Application password (not your login password)
+   - Callsign: Callsign for uploads
+   - API Key: Your Club Log API key
+3. Use Log Manager (F6) → Club Log button
 
 ### Spot Settings
 

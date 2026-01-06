@@ -102,6 +102,12 @@ class QSO(BaseModel):
     log_id: Optional[int] = None  # Virtual log this QSO belongs to
     source: str = Field(default="manual")  # QSO source: manual, udp_adif, udp_wsjtx
 
+    # QRZ Logbook sync
+    qrz_logid: Optional[str] = None  # QRZ Logbook record ID (for sync tracking)
+
+    # Club Log sync
+    clublog_uploaded: bool = False  # Whether QSO has been uploaded to Club Log
+
     # Contest fields
     contest_id: Optional[int] = None
     exchange_sent: Optional[str] = None
