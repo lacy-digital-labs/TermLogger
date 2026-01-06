@@ -817,23 +817,29 @@ class MainScreen(Screen):
         try:
             rig_type = self.app.config.rig_control_type
             if rig_type == RigControlType.RIGCTLD and self._rigctld_service:
-                # Set mode FIRST to avoid auto-offset issues when mode changes
+                # F-M-F sequence handles both band memory and auto-offset issues
+                # 1. Set frequency (triggers band memory recall if changing bands)
+                await self._rigctld_service.set_frequency_mhz(spot.frequency)
+                # 2. Set mode (overrides band memory, but may cause auto-offset)
                 if spot.mode:
                     rig_mode = RigctldService.map_mode_to_rigctld(
                         spot.mode, spot.frequency
                     )
                     await self._rigctld_service.set_mode(rig_mode)
-                # Then set frequency (overrides any auto-offset from mode change)
+                # 3. Set frequency again (corrects any auto-offset from mode change)
                 await self._rigctld_service.set_frequency_mhz(spot.frequency)
                 logger.info(f"QSY to {spot.frequency:.3f} MHz {spot.mode or ''}")
             elif rig_type == RigControlType.FLEXRADIO and self._flexradio_service:
-                # Set mode FIRST to avoid auto-offset issues when mode changes
+                # F-M-F sequence handles both band memory and auto-offset issues
+                # 1. Set frequency (triggers band memory recall if changing bands)
+                await self._flexradio_service.set_frequency_mhz(spot.frequency)
+                # 2. Set mode (overrides band memory, but may cause auto-offset)
                 if spot.mode:
                     flex_mode = FlexRadioService.map_mode_to_flex(
                         spot.mode, spot.frequency
                     )
                     await self._flexradio_service.set_mode(flex_mode)
-                # Then set frequency (overrides any auto-offset from mode change)
+                # 3. Set frequency again (corrects any auto-offset from mode change)
                 await self._flexradio_service.set_frequency_mhz(spot.frequency)
                 logger.info(f"QSY to {spot.frequency:.3f} MHz {spot.mode or ''}")
         except Exception as e:
@@ -1398,11 +1404,15 @@ class MainScreen(Screen):
         """Tune rigctld radio to frequency and mode."""
         try:
             if self._rigctld_service:
-                # Set mode FIRST to avoid auto-offset issues when mode changes
+                # F-M-F sequence handles both band memory and auto-offset issues
+                # 1. Set frequency (triggers band memory recall if changing bands)
+                await self._rigctld_service.set_frequency_mhz(frequency)
+
+                # 2. Set mode (overrides band memory, but may cause auto-offset)
                 rig_mode = RigctldService.map_mode_to_rigctld(mode, frequency)
                 await self._rigctld_service.set_mode(rig_mode)
 
-                # Then set frequency (overrides any auto-offset from mode change)
+                # 3. Set frequency again (corrects any auto-offset from mode change)
                 await self._rigctld_service.set_frequency_mhz(frequency)
 
                 logger.info(f"Tuned rigctld to {frequency:.3f} MHz {mode}")
@@ -1424,11 +1434,15 @@ class MainScreen(Screen):
         """Tune Flex Radio to frequency and mode."""
         try:
             if self._flexradio_service:
-                # Set mode FIRST to avoid auto-offset issues when mode changes
+                # F-M-F sequence handles both band memory and auto-offset issues
+                # 1. Set frequency (triggers band memory recall if changing bands)
+                await self._flexradio_service.set_frequency_mhz(frequency)
+
+                # 2. Set mode (overrides band memory, but may cause auto-offset)
                 flex_mode = FlexRadioService.map_mode_to_flex(mode, frequency)
                 await self._flexradio_service.set_mode(flex_mode)
 
-                # Then set frequency (overrides any auto-offset from mode change)
+                # 3. Set frequency again (corrects any auto-offset from mode change)
                 await self._flexradio_service.set_frequency_mhz(frequency)
 
                 logger.info(f"Tuned Flex Radio to {frequency:.3f} MHz {mode}")
