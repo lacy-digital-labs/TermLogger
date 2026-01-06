@@ -2,6 +2,8 @@
 
 A terminal-based amateur radio logging application built with Python and Textual.
 
+> TermLogger is currently currently in Alpha testing, if you find defects, please create an issue.  You should export and backup your logs frequently.
+
 ## Features
 
 - **Fast keyboard-driven QSO logging** - Optimized for rapid contest and everyday logging
