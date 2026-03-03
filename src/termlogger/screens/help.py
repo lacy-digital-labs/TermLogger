@@ -351,7 +351,7 @@ class SplashScreen(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static(LOGO, classes="logo")
-            yield Static("Version 26.01.02", classes="version")
+            yield Static("Version 26.01.03", classes="version")
             yield Static("Terminal-Based Amateur Radio Logging", classes="tagline")
             yield Static("Lacy Digital Labs, LLC", classes="company")
             yield Static("Created by Stacy Lacy, NQ0S", classes="attribution")
