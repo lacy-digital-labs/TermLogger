@@ -1,7 +1,10 @@
 """TermLogger - Terminal Amateur Radio Logging Application."""
 
+import argparse
 import logging
 from pathlib import Path
+
+from . import __version__
 
 from textual.app import App
 
@@ -43,6 +46,10 @@ class TermLoggerApp(App):
 
 def main() -> None:
     """Run the TermLogger application."""
+    parser = argparse.ArgumentParser(description="TermLogger - Amateur Radio Logger")
+    parser.add_argument("--version", action="version", version=f"termlogger {__version__}")
+    parser.parse_args()
+
     # Load config to check debug logging settings
     config = load_config()
 

@@ -26,7 +26,7 @@ jobs:
           - os: macos-latest
             artifact_name: termlogger-macos-arm64
             asset_name: termlogger-macos-arm64
-          - os: macos-15-large
+          - os: macos-13
             artifact_name: termlogger-macos-x86_64
             asset_name: termlogger-macos-x86_64
           - os: windows-latest
@@ -145,6 +145,52 @@ jobs:
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-homebrew:
+    name: Update Homebrew Formula
+    needs: [release]
+    runs-on: ubuntu-latest
+    # Requires HOMEBREW_TAP_TOKEN secret (GitHub PAT with write access to homebrew-termlogger repo)
+    if: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
+    steps:
+      - name: Get release version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Download macOS ARM64 binary
+        run: |
+          curl -sL "https://github.com/lacy-digital-labs/TermLogger/releases/download/${GITHUB_REF_NAME}/termlogger-macos-arm64" -o termlogger-macos-arm64
+          echo "ARM64_SHA=$(sha256sum termlogger-macos-arm64 | cut -d' ' -f1)" >> $GITHUB_ENV
+
+      - name: Download macOS x86_64 binary
+        run: |
+          curl -sL "https://github.com/lacy-digital-labs/TermLogger/releases/download/${GITHUB_REF_NAME}/termlogger-macos-x86_64" -o termlogger-macos-x86_64
+          echo "X86_64_SHA=$(sha256sum termlogger-macos-x86_64 | cut -d' ' -f1)" >> $GITHUB_ENV
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: lacy-digital-labs/homebrew-termlogger
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update formula
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          python3 scripts/update_homebrew_formula.py \
+            homebrew-tap/Formula/termlogger.rb \
+            "$VERSION" \
+            "$ARM64_SHA" \
+            "$X86_64_SHA"
+
+      - name: Commit and push formula update
+        run: |
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/termlogger.rb
+          git commit -m "Update termlogger to ${{ steps.version.outputs.version }}"
+          git push
 
   publish-pypi:
     name: Publish to PyPI

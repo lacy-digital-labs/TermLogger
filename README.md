@@ -2,7 +2,7 @@
 
 A terminal-based amateur radio logging application built with Python and Textual.
 
-> TermLogger is currently currently in Alpha testing, if you find defects, please create an issue.  You should export and backup your logs frequently.
+> TermLogger is currently in Alpha testing. If you find defects, please create an issue. Export and back up your logs frequently.
 
 
 ## Features
@@ -29,7 +29,37 @@ A terminal-based amateur radio logging application built with Python and Textual
 
 ## Installation
 
-### Recommended: pipx (isolated environment)
+### macOS — Homebrew (recommended)
+
+```bash
+brew tap lacy-digital-labs/termlogger
+brew install termlogger
+```
+
+Updates are handled by `brew upgrade termlogger`.
+
+### All platforms — pre-built binary (no Python required)
+
+Download the standalone binary for your platform from the [latest release](https://github.com/lacy-digital-labs/TermLogger/releases/latest):
+
+| Platform | File |
+|----------|------|
+| macOS Apple Silicon | `termlogger-macos-arm64` |
+| macOS Intel | `termlogger-macos-x86_64` |
+| Linux x86\_64 | `termlogger-linux-x86_64` |
+| Linux ARM64 | `termlogger-linux-arm64` |
+| Windows x86\_64 | `termlogger-windows-x86_64.exe` |
+
+On macOS/Linux, make the binary executable after downloading:
+
+```bash
+chmod +x termlogger-macos-arm64   # adjust filename for your platform
+./termlogger-macos-arm64
+```
+
+On macOS you may need to allow the binary in **System Settings → Privacy & Security** the first time you run it.
+
+### Python — pipx (isolated environment)
 
 ```bash
 # Install pipx if you don't have it
@@ -40,7 +70,7 @@ pipx ensurepath
 pipx install termlogger
 ```
 
-### Alternative: pip
+### Python — pip
 
 ```bash
 pip install termlogger
@@ -58,8 +88,8 @@ pip install -e ".[dev]"
 
 ### Requirements
 
-- Python 3.11 or later
 - A terminal with Unicode support
+- Python 3.11 or later (pipx/pip installs only — not needed for binary or Homebrew)
 
 ## Usage
 
